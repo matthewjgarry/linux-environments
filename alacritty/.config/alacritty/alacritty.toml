@@ -1,0 +1,32 @@
+# Alacritty configuration
+[font]
+size = 10.0
+
+normal = { family = "FiraCode Nerd Font", style = "Regular" }
+
+# normal.family = "FiraCode Nerd Font"
+# normal.style = "Regular"
+
+bold.family = "FiraCode Nerd Font"
+bold.style = "Bold"
+
+[cursor]
+# style.shape = "Beam"
+style.shape = "Underline"
+style.blinking = "On"
+
+
+[general]
+import = ["~/.config/alacritty/dracula.toml"]
+
+[window]
+opacity = 0.9
+blur = true
+
+[window.dimensions]
+columns = 100
+lines = 25
+
+[window.padding]
+x = 4 
+y = 4
