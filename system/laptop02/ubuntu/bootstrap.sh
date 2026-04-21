@@ -466,11 +466,6 @@ apply_gnome_environment() {
 
   echo "🧩 Applying GNOME environment settings..."
 
-  if ! command -v gsettings >/dev/null 2>&1; then
-    echo "⚠ gsettings not found, skipping GNOME environment configuration"
-    return 0
-  fi
-
   # --------------------------------------------------
   # Theme / appearance
   # --------------------------------------------------
@@ -492,14 +487,12 @@ apply_gnome_environment() {
   # --------------------------------------------------
   # Dock position and icon size
   # --------------------------------------------------
-  if gsettings writable org.gnome.shell.extensions.dash-to-dock dock-position >/dev/null 2>&1; then
-    gsettings set org.gnome.shell.extensions.dash-to-dock dock-position 'BOTTOM'
-    gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 42
-  fi
+  gsettings set org.gnome.shell.extensions.dash-to-dock dock-position 'BOTTOM'
+  gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 42
 
   # --------------------------------------------------
   # Favorites
-  # - use a fixed literal list to avoid quoting/format issues
+  # - fixed literal list to avoid quoting/format issues
   # --------------------------------------------------
   gsettings set org.gnome.shell favorite-apps \
     "['firefox_firefox.desktop', 'thunderbird_thunderbird.desktop', 'org.gnome.Nautilus.desktop', 'Alacritty.desktop', 'discord_discord.desktop', 'plex-desktop_plex-desktop.desktop']"
