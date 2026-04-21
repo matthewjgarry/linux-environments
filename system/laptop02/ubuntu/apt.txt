@@ -56,7 +56,6 @@ shim-signed
 sl
 snap
 software-properties-common
-steamcmd:i386
 steam-installer
 stow
 thunderbird

@@ -129,14 +129,15 @@ ensure_snap() {
   echo "✓ snapd installed and enabled"
 }
 
+# --------------------------------------------------
+# Wait for snapd readiness before installing snaps
+# --------------------------------------------------
 wait_for_snap() {
   echo "⏳ Waiting for snapd to become ready..."
 
-  # Ensure service is running
   sudo systemctl enable --now snapd
 
-  # Wait until snap responds
-  for i in {1..20}; do
+  for _ in {1..20}; do
     if snap version >/dev/null 2>&1; then
       echo "✓ snapd is ready"
       return 0
@@ -144,26 +145,33 @@ wait_for_snap() {
     sleep 1
   done
 
-  echo "⚠ snapd did not become ready in time, continuing anyway"
+  echo "⚠ snapd did not become ready in time"
 }
 
 # --------------------------------------------------
 # Ensure Homebrew is available
+# - install if missing
+# - expose brew to the current bootstrap shell
 # --------------------------------------------------
 ensure_brew() {
-  if command -v brew >/dev/null 2>&1; then
+  local brew_bin="/home/linuxbrew/.linuxbrew/bin/brew"
+
+  if [[ -x "$brew_bin" ]]; then
     echo "✓ Homebrew is available"
+    eval "$("$brew_bin" shellenv)"
     return 0
   fi
 
-  echo "📦 Homebrew not found. Installing Homebrew..."
+  echo "🍺 Homebrew not found. Installing Homebrew..."
   NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-  if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  if [[ -x "$brew_bin" ]]; then
+    eval "$("$brew_bin" shellenv)"
+    echo "✓ Homebrew installed"
+  else
+    echo "✗ Homebrew install appears to have failed"
+    exit 1
   fi
-
-  echo "✓ Homebrew installed"
 }
 
 # --------------------------------------------------
@@ -386,7 +394,7 @@ set_user_environment_defaults() {
   mkdir -p "$HOME/.local/bin"
 
   cat >"$HOME/.config/environment.d/path.conf" <<EOF
-PATH=$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin
+PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin
 EOF
 
   cat >"$HOME/.config/environment.d/defaults.conf" <<EOF
@@ -415,19 +423,19 @@ EOF
   fi
 
   if command -v xdg-mime >/dev/null 2>&1 && command -v xdg-settings >/dev/null 2>&1; then
-    if [[ -f /usr/share/applications/firefox.desktop ]]; then
-      xdg-settings set default-web-browser firefox.desktop || true
-      xdg-mime default firefox.desktop x-scheme-handler/http
-      xdg-mime default firefox.desktop x-scheme-handler/https
-      xdg-mime default firefox.desktop text/html
+    if [[ -f /usr/share/applications/firefox_firefox.desktop ]]; then
+      xdg-settings set default-web-browser firefox_firefox.desktop || true
+      xdg-mime default firefox_firefox.desktop x-scheme-handler/http
+      xdg-mime default firefox_firefox.desktop x-scheme-handler/https
+      xdg-mime default firefox_firefox.desktop text/html
       echo "✓ Default browser set to Firefox"
     else
       echo "⚠ Firefox desktop entry not found, skipping browser default"
     fi
 
-    if [[ -f /usr/share/applications/thunderbird.desktop ]]; then
-      xdg-mime default thunderbird.desktop x-scheme-handler/mailto
-      xdg-mime default thunderbird.desktop message/rfc822
+    if [[ -f /usr/share/applications/thunderbird_thunderbird.desktop ]]; then
+      xdg-mime default thunderbird_thunderbird.desktop x-scheme-handler/mailto
+      xdg-mime default thunderbird_thunderbird.desktop message/rfc822
       echo "✓ Default mail client set to Thunderbird"
     else
       echo "⚠ Thunderbird desktop entry not found, skipping mail client default"
