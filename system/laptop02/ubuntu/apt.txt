@@ -55,7 +55,6 @@ qbittorrent
 shim-signed
 sl
 snap
-software-properties-common
 steam-installer
 stow
 thunderbird

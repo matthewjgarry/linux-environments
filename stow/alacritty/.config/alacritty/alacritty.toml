@@ -16,8 +16,8 @@ style.shape = "Underline"
 style.blinking = "On"
 
 
-[general]
-import = ["~/.config/alacritty/dracula.toml"]
+# [general]
+# import = ["~/.config/alacritty/dracula.toml"]
 
 [window]
 opacity = 0.9
