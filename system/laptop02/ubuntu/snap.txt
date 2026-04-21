@@ -12,7 +12,6 @@ gnome-42-2204
 gnome-46-2404
 gtk-common-themes
 kf6-core24
-kubectl
 lxqt-support-core24
 mesa-2404
 mesa-core20

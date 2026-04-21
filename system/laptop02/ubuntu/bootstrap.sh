@@ -495,16 +495,16 @@ apply_gnome_environment() {
   # Dock position and icon size
   # --------------------------------------------------
   if gsettings writable org.gnome.shell.extensions.dash-to-dock dock-position >/dev/null 2>&1; then
-    gsettings set org.gnome.shell.extensions.dash-to-dock dock-position 'BOTTOM'
+    gsettings set org.gnome.shell.extensions.dash-to-dock dock-position BOTTOM
+    gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false
     gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 42
   fi
 
   # --------------------------------------------------
   # Favorites
   # --------------------------------------------------
-  firefox_entry="$(find_desktop_entry firefox.desktop org.mozilla.firefox.desktop || true)"
-  thunderbird_entry="$(find_desktop_entry thunderbird.desktop org.mozilla.Thunderbird.desktop || true)"
-  discord_entry="$(find_desktop_entry discord.desktop com.discordapp.Discord.desktop || true)"
+  firefox_entry="$(find_desktop_entry firefox.desktop org.mozilla.firefox.desktop firefox_firefox.desktop || true)"
+  discord_entry="$(find_desktop_entry discord.desktop com.discordapp.Discord.desktop discord_discord.desktop || true)"
   alacritty_entry="$(find_desktop_entry Alacritty.desktop alacritty.desktop || true)"
   plex_entry="$(find_desktop_entry plex-desktop_plex-desktop.desktop || true)"
 
