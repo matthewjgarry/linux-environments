@@ -463,8 +463,6 @@ find_desktop_entry() {
 apply_gnome_environment() {
   local wallpaper_path="$REPO_ROOT/wallpaper/1224149.png"
   local wallpaper_uri="file://$wallpaper_path"
-  local firefox_entry thunderbird_entry discord_entry alacritty_entry plex_entry
-  local favorites=()
 
   echo "🧩 Applying GNOME environment settings..."
 
@@ -476,10 +474,10 @@ apply_gnome_environment() {
   # --------------------------------------------------
   # Theme / appearance
   # --------------------------------------------------
-  gsettings set org.gnome.desktop.interface gtk-theme Yaru-magenta-dark
-  gsettings set org.gnome.desktop.interface icon-theme Yaru-magenta
-  gsettings set org.gnome.desktop.interface color-scheme prefer-dark
-  gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font Regular'
+  gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-magenta-dark'
+  gsettings set org.gnome.desktop.interface icon-theme 'Yaru-magenta'
+  gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+  gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 11'
   gsettings set org.gnome.desktop.interface show-battery-percentage true
 
   # --------------------------------------------------
@@ -495,33 +493,16 @@ apply_gnome_environment() {
   # Dock position and icon size
   # --------------------------------------------------
   if gsettings writable org.gnome.shell.extensions.dash-to-dock dock-position >/dev/null 2>&1; then
-    gsettings set org.gnome.shell.extensions.dash-to-dock dock-position BOTTOM
-    gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false
+    gsettings set org.gnome.shell.extensions.dash-to-dock dock-position 'BOTTOM'
     gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 42
   fi
 
   # --------------------------------------------------
   # Favorites
+  # - use a fixed literal list to avoid quoting/format issues
   # --------------------------------------------------
-  firefox_entry="$(find_desktop_entry firefox.desktop org.mozilla.firefox.desktop firefox_firefox.desktop || true)"
-  discord_entry="$(find_desktop_entry discord.desktop com.discordapp.Discord.desktop discord_discord.desktop || true)"
-  alacritty_entry="$(find_desktop_entry Alacritty.desktop alacritty.desktop || true)"
-  plex_entry="$(find_desktop_entry plex-desktop_plex-desktop.desktop || true)"
-
-  [[ -n "${firefox_entry:-}" ]] && favorites+=("'$firefox_entry'")
-  [[ -n "${thunderbird_entry:-}" ]] && favorites+=("'$thunderbird_entry'")
-  [[ -n "${discord_entry:-}" ]] && favorites+=("'$discord_entry'")
-  [[ -n "${alacritty_entry:-}" ]] && favorites+=("'$alacritty_entry'")
-  [[ -n "${plex_entry:-}" ]] && favorites+=("'$plex_entry'")
-
-  if ((${#favorites[@]} > 0)); then
-    local joined
-    joined="$(
-      IFS=,
-      echo "${favorites[*]}"
-    )"
-    gsettings set org.gnome.shell favorite-apps "[$joined]"
-  fi
+  gsettings set org.gnome.shell favorite-apps \
+    "['firefox_firefox.desktop', 'thunderbird_thunderbird.desktop', 'org.gnome.Nautilus.desktop', 'Alacritty.desktop', 'discord_discord.desktop', 'plex-desktop_plex-desktop.desktop']"
 
   # --------------------------------------------------
   # Wallpaper
@@ -536,7 +517,6 @@ apply_gnome_environment() {
 
   echo "✓ GNOME environment configured"
 }
-
 # --------------------------------------------------
 # Disable broken touchscreen persistently
 # - requested specifically as xorg device 9
