@@ -1,0 +1,7 @@
+[Unit]
+Description=System package updater
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/dotfiles
+ExecStart=%h/dotfiles/scripts/system-update.sh

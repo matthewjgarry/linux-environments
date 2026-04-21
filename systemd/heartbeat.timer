@@ -1,0 +1,10 @@
+[Unit]
+Description=Send daily heartbeat notification
+
+[Timer]
+OnBootSec=35m
+OnUnitActiveSec=1d
+Persistent=true
+
+[Install]
+WantedBy=timers.target

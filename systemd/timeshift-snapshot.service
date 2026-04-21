@@ -1,0 +1,7 @@
+[Unit]
+Description=Create a Timeshift snapshot
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/dotfiles
+ExecStart=%h/dotfiles/scripts/timeshift-snapshot.sh

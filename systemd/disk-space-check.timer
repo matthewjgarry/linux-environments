@@ -1,0 +1,10 @@
+[Unit]
+Description=Run disk space check daily
+
+[Timer]
+OnBootSec=30m
+OnUnitActiveSec=1d
+Persistent=true
+
+[Install]
+WantedBy=timers.target

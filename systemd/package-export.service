@@ -1,0 +1,7 @@
+[Unit]
+Description=Export installed package list to dotfiles repo
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/dotfiles
+ExecStart=%h/dotfiles/scripts/package-export.sh

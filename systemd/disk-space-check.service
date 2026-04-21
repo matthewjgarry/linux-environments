@@ -1,0 +1,7 @@
+[Unit]
+Description=Check disk usage and notify if high
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/dotfiles
+ExecStart=%h/dotfiles/scripts/disk-space-check.sh
