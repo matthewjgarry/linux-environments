@@ -19,3 +19,4 @@ plex-desktop
 snapd
 snapd-desktop-integration
 snap-store
+thunderbird

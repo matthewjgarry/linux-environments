@@ -482,12 +482,14 @@ apply_gnome_environment() {
   # --------------------------------------------------
   gsettings set org.gnome.settings-daemon.plugins.color night-light-enabled true
   gsettings set org.gnome.settings-daemon.plugins.color night-light-schedule-automatic true
-  gsettings set org.gnome.settings-daemon.plugins.color night-light-temperature uint32 3700
+  gsettings set org.gnome.settings-daemon.plugins.color night-light-temperature "uint32 3700"
 
   # --------------------------------------------------
   # Dock position and icon size
   # --------------------------------------------------
   gsettings set org.gnome.shell.extensions.dash-to-dock dock-position 'BOTTOM'
+  gsettings set org.gnome.shell.extensions.ding show-home false
+  gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false
   gsettings set org.gnome.shell.extensions.dash-to-dock dash-max-icon-size 42
 
   # --------------------------------------------------
@@ -727,6 +729,15 @@ show_summary() {
   echo "Local IP:"
   echo "  $local_ip"
   echo
+}
+
+# --------------------------------------------------
+# Prompt for reboot
+# --------------------------------------------------
+prompt_reboot() {
+  echo "Press Enter to reboot..."
+  read -r
+  sudo reboot
 }
 
 # --------------------------------------------------
