@@ -312,22 +312,59 @@ install_packages() {
 
   # ----------------------------
   # Homebrew packages
+  # - supports blank lines and comments
+  # - supports tap lines in the form: tap:homebrew/cask-fonts
+  # - reports failures instead of silently swallowing them
   # ----------------------------
   if [[ -f "$brew_file" ]]; then
-    if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
-      eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-    fi
+    ensure_brew
 
     echo "📦 Installing Homebrew packages from $brew_file..."
-    mapfile -t brew_packages <"$brew_file"
-    if ((${#brew_packages[@]} > 0)); then
-      brew update
-      brew upgrade
-      for pkg in "${brew_packages[@]}"; do
-        brew install "$pkg" || true
-      done
+
+    local brew_failed=0
+    local line pkg
+
+    brew update
+    brew upgrade || true
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      # Trim leading/trailing whitespace
+      line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+      # Skip blanks and comments
+      [[ -z "$line" ]] && continue
+      [[ "$line" =~ ^# ]] && continue
+
+      # Support taps written as: tap:homebrew/cask-fonts
+      if [[ "$line" =~ ^tap: ]]; then
+        pkg="${line#tap:}"
+        echo "🍺 Tapping $pkg..."
+        if ! brew tap "$pkg"; then
+          echo "⚠ Failed to tap $pkg"
+          brew_failed=1
+        fi
+        continue
+      fi
+
+      pkg="$line"
+
+      # Skip if already installed
+      if brew list --formula | grep -qx "$pkg" || brew list --cask 2>/dev/null | grep -qx "$pkg"; then
+        echo "✓ Homebrew package already installed: $pkg"
+        continue
+      fi
+
+      echo "🍺 Installing Homebrew package: $pkg..."
+      if ! brew install "$pkg"; then
+        echo "⚠ Failed to install Homebrew package: $pkg"
+        brew_failed=1
+      fi
+    done <"$brew_file"
+
+    if ((brew_failed != 0)); then
+      echo "⚠ One or more Homebrew packages failed to install"
     else
-      echo "⚠ brew.txt exists but is empty, skipping"
+      echo "✓ Homebrew packages processed successfully"
     fi
   else
     echo "⚠ No brew.txt found at $brew_file, skipping"
