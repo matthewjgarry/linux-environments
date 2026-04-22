@@ -1,49 +1,189 @@
-# Dotfiles
+# 🧠 linux-environments
 
-Personal configuration repository for managing and deploying my Linux environments across multiple machines.
+> Reproducible, observable, and automated Linux systems.
 
-## Overview
+---
 
-This repository contains my system configuration files (“dotfiles”) and supporting scripts used to customize and standardize my development environments. It is designed to be modular, reproducible, and adaptable across different machines and distributions.
+## 💡 Philosophy
 
-The project is currently in an early stage and actively evolving. Structure, tooling, and conventions will continue to improve over time as part of an ongoing effort to refine my workflow and system design practices.
+This repo is built around a simple principle:
 
-## Goals
+> **A system should be recoverable, inspectable, and self-reporting.**
 
-- Maintain a centralized, version-controlled source of truth for system configuration  
-- Enable quick setup and recovery of development environments  
-- Support multiple machines with differing roles and operating systems  
-- Gradually transition toward a more automated and reproducible setup process  
+It is not just dotfiles.
 
-## Scope
+It is a **unified platform** for managing multiple machines with:
 
-This repository currently includes:
+* 🔁 **Reproducibility** — rebuild any system from scratch
+* 🧱 **Recoverability** — always know and restore system state
+* ⚙️ **Automation** — systems maintain themselves
+* 🔔 **Observability** — systems report what they’re doing
 
-- Shell configuration (zsh, bash)  
-- Hyprland and Wayland-related configuration  
-- Application configs (e.g., Neovim, terminal, window manager)  
-- Package lists and environment setup references  
-- Early-stage post-installation scripting  
+---
 
-## Structure (WIP)
+## 🖥️ Systems
 
-The repository is in the process of being reorganized to better support:
+| Machine           | ID          | OS     |
+| ----------------- | ----------- | ------ |
+| 💼 Dell Precision | `laptop01`  | Arch   |
+| 💻 HP Envy        | `laptop02`  | Ubuntu |
+| 🧪 Covid PC       | `desktop01` | Arch   |
+| 🐳 Docker Server  | `server01`  | Ubuntu |
 
-- Multiple environments (desktop, laptop(s), server)  
-- Multiple distributions (Arch Linux, Ubuntu)  
-- Clear separation between shared and machine-specific configs  
+Each machine is **independently defined, consistently managed**.
 
-Planned structure improvements include:
+---
 
-- `common/` → shared configurations across all systems  
-- `arch/` → Arch-specific configurations  
-- `ubuntu/` → Ubuntu-specific configurations  
-- `hosts/` → machine-specific overrides  
-- `scripts/` → installation and automation scripts  
+## 🧩 Structure
 
-## Installation
+```text
+linux-environments/
+├── install.sh      # entry point
+├── scripts/        # automation (notify, export, stow)
+├── system/         # package/state per machine
+├── hosts/          # machine-specific configs
+├── stow/           # shared dotfiles
+├── systemd/        # services + timers
+└── wallpaper/
+```
 
-Dotfiles are currently managed using GNU Stow:
+---
+
+## 🔄 How It Works
+
+```text
+install.sh
+   ↓
+bootstrap (per machine + OS)
+   ↓
+packages → environment → dotfiles → services
+   ↓
+system state exported + monitored
+   ↓
+notifications sent (Discord)
+```
+
+---
+
+## 🚀 Install
 
 ```bash
-stow <package>
+git clone https://github.com/matthewjgarry/linux-environments.git ~/dotfiles
+cd ~/dotfiles
+./install.sh
+```
+
+The installer:
+
+* selects machine
+* detects OS
+* configures git + webhook
+* launches the correct bootstrap
+
+---
+
+## 🧪 Bootstrap
+
+Each bootstrap:
+
+* verifies machine + OS
+* installs packages (apt/pacman/flatpak/snap/brew)
+* configures environment (GNOME, shell, defaults)
+* applies dotfiles (`stow`)
+* installs services
+* exports system state
+* shows summary → reboot
+
+---
+
+## 📦 Package State
+
+Each machine defines its own system:
+
+```text
+system/<machine>/<os>/
+├── apt.txt | pacman.txt
+├── flatpak.txt
+├── snap.txt
+└── brew.txt
+```
+
+State is **authoritative and tracked**.
+
+---
+
+## 🔗 Configuration
+
+* shared configs → `stow/`
+* machine overrides → `hosts/<machine>/<os>/`
+
+Everything is applied automatically.
+
+---
+
+## ⚙️ Automation
+
+User-level services handle:
+
+* 📦 package tracking
+* 🔄 system updates
+* 🔍 repo drift detection
+* 🧾 dotfile changes
+* 💾 disk monitoring
+* ❤️ heartbeat
+
+Systems are **continuously self-aware**.
+
+---
+
+## 🔔 Notifications
+
+All machines report to Discord via webhook.
+
+```bash
+notify.sh "Disk Warning" "Root is 91% full" warning
+```
+
+| Level | Meaning |
+| ----- | ------- |
+| ℹ️    | info    |
+| ✅     | success |
+| ⚠️    | warning |
+| ❌     | error   |
+
+Each message includes:
+
+* machine ID
+* hostname
+* timestamp
+
+---
+
+## 🧠 Identity
+
+Each machine is bound to:
+
+```bash
+~/.config/dotfiles/machine-id
+```
+
+This ensures:
+
+* correct config application
+* safe automation
+* separation of system state
+
+---
+
+## 📌 Summary
+
+* 🔁 reproducible systems
+* 🧱 recoverable state
+* ⚙️ automated maintenance
+* 🔔 centralized visibility
+
+---
+
+## 🧑‍💻 Author
+
+Matthew J Garry
