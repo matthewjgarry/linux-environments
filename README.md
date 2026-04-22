@@ -6,18 +6,28 @@
 
 ## 💡 Philosophy
 
-This repo is built around a simple principle:
-
 > **A system should be recoverable, inspectable, and self-reporting.**
 
-It is not just dotfiles.
-
-It is a **unified platform** for managing multiple machines with:
+This repo is not just dotfiles — it’s a **unified platform** for managing multiple machines with:
 
 * 🔁 **Reproducibility** — rebuild any system from scratch
 * 🧱 **Recoverability** — always know and restore system state
 * ⚙️ **Automation** — systems maintain themselves
 * 🔔 **Observability** — systems report what they’re doing
+
+---
+
+## ⚡ Mental Model
+
+```text
+Define → Apply → Observe → Correct → Repeat
+```
+
+* **Define** → package lists + configs
+* **Apply** → bootstrap + stow
+* **Observe** → services + notifications
+* **Correct** → update repo
+* **Repeat** → consistent across all machines
 
 ---
 
@@ -51,16 +61,45 @@ linux-environments/
 
 ## 🔄 How It Works
 
+### Quick flow
+
 ```text
 install.sh
    ↓
-bootstrap (per machine + OS)
+bootstrap (machine + OS)
    ↓
 packages → environment → dotfiles → services
    ↓
-system state exported + monitored
+state exported + monitored
    ↓
 notifications sent (Discord)
+```
+
+---
+
+### Visual flow
+
+```mermaid
+flowchart TD
+    A[install.sh] --> B[Bootstrap]
+    B --> C[Install Packages]
+    B --> D[Configure Environment]
+    B --> E[Apply Dotfiles]
+    B --> F[Enable Services]
+
+    F --> G[System Monitoring]
+    G --> H[Package Export]
+    G --> I[Repo / Dotfile Checks]
+    G --> J[Disk + Heartbeat]
+
+    H --> K[State Stored in Repo]
+    I --> K
+
+    G --> L[notify.sh]
+    L --> M[Discord Webhook]
+
+    K --> N[Reproducibility]
+    M --> O[Observability]
 ```
 
 ---
@@ -73,12 +112,14 @@ cd ~/dotfiles
 ./install.sh
 ```
 
-The installer:
+Installer will:
 
-* selects machine
-* detects OS
-* configures git + webhook
-* launches the correct bootstrap
+* 🖥️ select machine
+* 🧠 detect OS
+* 🔑 configure git
+* 🔔 configure Discord webhook
+* 🆔 set machine identity
+* 🚀 launch bootstrap
 
 ---
 
@@ -87,18 +128,16 @@ The installer:
 Each bootstrap:
 
 * verifies machine + OS
-* installs packages (apt/pacman/flatpak/snap/brew)
+* installs packages (apt / pacman / flatpak / snap / brew)
 * configures environment (GNOME, shell, defaults)
 * applies dotfiles (`stow`)
 * installs services
 * exports system state
-* shows summary → reboot
+* displays summary → reboot
 
 ---
 
 ## 📦 Package State
-
-Each machine defines its own system:
 
 ```text
 system/<machine>/<os>/
@@ -108,16 +147,17 @@ system/<machine>/<os>/
 └── brew.txt
 ```
 
-State is **authoritative and tracked**.
+* **source of truth**
+* automatically synced from system → repo
 
 ---
 
 ## 🔗 Configuration
 
-* shared configs → `stow/`
-* machine overrides → `hosts/<machine>/<os>/`
+* shared → `stow/`
+* per-machine → `hosts/<machine>/<os>/`
 
-Everything is applied automatically.
+Applied automatically during bootstrap.
 
 ---
 
@@ -138,7 +178,7 @@ Systems are **continuously self-aware**.
 
 ## 🔔 Notifications
 
-All machines report to Discord via webhook.
+All machines report to Discord.
 
 ```bash
 notify.sh "Disk Warning" "Root is 91% full" warning
@@ -161,17 +201,15 @@ Each message includes:
 
 ## 🧠 Identity
 
-Each machine is bound to:
-
 ```bash
 ~/.config/dotfiles/machine-id
 ```
 
-This ensures:
+Ensures:
 
-* correct config application
+* correct config targeting
 * safe automation
-* separation of system state
+* separation of machine state
 
 ---
 
