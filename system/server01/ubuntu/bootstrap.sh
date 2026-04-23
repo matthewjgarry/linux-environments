@@ -267,6 +267,114 @@ install_packages() {
 }
 
 # --------------------------------------------------
+# Setup age + sops for encrypted secrets
+# - expects age to be installed via apt.txt
+# - installs latest sops .deb from GitHub releases
+# - creates the standard SOPS age key location
+# - generates a key only if one does not already exist
+# - locks permissions for private key material
+# - writes the public key to a predictable local file
+#---------------------------------------------------
+setup_age_and_sops() {
+  local age_base_dir="${XDG_CONFIG_HOME:-$HOME/.config}/sops"
+  local age_dir="$age_base_dir/age"
+  local key_file="$age_dir/keys.txt"
+  local dotfiles_dir="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles"
+  local public_key_file="$dotfiles_dir/age-public-key"
+  local public_key=""
+  local sops_version=""
+
+  echo " Setting up age + sops..."
+
+  if ! command -v age-keygen >/dev/null 2>&1; then
+    echo "✗ age-keygen not found. Make sure 'age' is present in system/$EXPECTED_MACHINE/$EXPECTED_OS/apt.txt"
+    exit 1
+  fi
+
+  if ! command -v sops >/dev/null 2>&1; then
+    echo " Installing sops..."
+    sops_version="$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep tag_name | cut -d'"' -f4)"
+
+    if [[ -z "$sops_version" ]]; then
+      echo "✗ Failed to determine latest sops version"
+      exit 1
+    fi
+
+    curl -Lo sops.deb "https://github.com/getsops/sops/releases/download/${sops_version}/sops_${sops_version#v}_amd64.deb"
+    sudo dpkg -i sops.deb
+    rm -f sops.deb
+    echo "✓ sops installed"
+  else
+    echo "✓ sops already installed"
+  fi
+
+  mkdir -p "$age_dir"
+  chmod 700 "$age_base_dir"
+  chmod 700 "$age_dir"
+
+  if [[ ! -f "$key_file" ]]; then
+    echo " No age key found. Generating..."
+    age-keygen -o "$key_file"
+    echo "✓ age key generated"
+  else
+    echo "✓ Existing age key found"
+  fi
+
+  chmod 600 "$key_file"
+
+  public_key="$(grep 'public key:' "$key_file" | awk '{print $4}')"
+
+  if [[ -z "$public_key" ]]; then
+    echo "✗ Failed to extract public key from $key_file"
+    exit 1
+  fi
+
+  mkdir -p "$dotfiles_dir"
+  printf '%s\n' "$public_key" > "$public_key_file"
+  chmod 600 "$public_key_file"
+
+  echo "✓ age + sops ready"
+  echo " Public key: $public_key"
+  echo " Private key: $key_file"
+}
+
+# --------------------------------------------------
+# Ensure SSH key exists for remote unlock
+# - generates ed25519 key if missing
+# - non-interactive
+# - safe (does not overwrite existing keys)
+# --------------------------------------------------
+ensure_ssh_key() {
+  local ssh_dir="$HOME/.ssh"
+  local key_file="$ssh_dir/id_ed25519"
+  local pub_file="${key_file}.pub"
+
+  echo " Checking for SSH key..."
+
+  mkdir -p "$ssh_dir"
+  chmod 700 "$ssh_dir"
+
+  if [[ -f "$pub_file" ]]; then
+    echo "✓ SSH key already exists"
+    return 0
+  fi
+
+  echo " No SSH key found. Generating..."
+
+  ssh-keygen -t ed25519 \
+    -f "$key_file" \
+    -N "" \
+    -C "server01-$(hostname)"
+
+  chmod 600 "$key_file"
+  chmod 644 "$pub_file"
+
+  echo "✓ SSH key generated"
+  echo " Public key:"
+  cat "$pub_file"
+}
+
+# --------------------------------------------------
 # Set default user environment
 # - PATH
 # - editor
@@ -355,48 +463,41 @@ setup_git_monitoring() {
 # - allows remote LUKS unlock over SSH during boot
 # --------------------------------------------------
 setup_remote_unlock() {
-  echo "🔐 Setting up remote unlock (dropbear-initramfs)..."
+  echo " Setting up remote unlock (dropbear-initramfs)..."
 
-  # Install required package
   sudo nala install -y dropbear-initramfs
-
-  # Ensure directory exists
   sudo mkdir -p /etc/dropbear/initramfs
 
-  # Copy user's SSH public key into initramfs
-  if [[ -f "$HOME/.ssh/id_ed25519.pub" ]]; then
-    echo "✓ Found SSH key, installing into initramfs"
-    sudo cp "$HOME/.ssh/id_ed25519.pub" /etc/dropbear/initramfs/authorized_keys
-  else
-    echo "⚠ No SSH public key found at ~/.ssh/id_ed25519.pub"
-    echo "⚠ You will need to manually add one to:"
-    echo "   /etc/dropbear/initramfs/authorized_keys"
+  if [[ ! -f "$HOME/.ssh/id_ed25519.pub" ]]; then
+    echo "✗ SSH public key missing after generation step"
+    echo " Remote unlock cannot be configured"
+    exit 1
   fi
 
-  # Configure networking (DHCP)
+  if ! grep -q "^ssh-ed25519 " "$HOME/.ssh/id_ed25519.pub"; then
+    echo "✗ Invalid SSH public key format in $HOME/.ssh/id_ed25519.pub"
+    exit 1
+  fi
+
+  echo "✓ Found SSH key, installing into initramfs"
+  sudo cp "$HOME/.ssh/id_ed25519.pub" /etc/dropbear/initramfs/authorized_keys
+  sudo chmod 600 /etc/dropbear/initramfs/authorized_keys
+  sudo chown root:root /etc/dropbear/initramfs/authorized_keys
+
   sudo sed -i 's/^#\?IP=.*/IP=dhcp/' /etc/initramfs-tools/initramfs.conf
 
-  # Configure dropbear to use custom port (optional but recommended)
-  sudo tee /etc/dropbear/initramfs/dropbear.conf >/dev/null <<EOF
-DROPBEAR_OPTIONS="-p 2222 -s -j -k"
+  sudo tee /etc/dropbear/initramfs/dropbear.conf >/dev/null <<'EOF'
+DROPBEAR_OPTIONS="-p 2222 -s -j -k -I 60"
 EOF
 
-  # Explanation of flags:
-  # -p 2222 → port
-  # -s      → disable password login
-  # -j      → disable local port forwarding
-  # -k      → disable remote port forwarding
-
-  # Rebuild initramfs
   sudo update-initramfs -u
-
   echo "✓ Remote unlock configured"
 }
 
 # --------------------------------------------------
 # Install and enable shared monitoring services/timers
 # - disk-space-check
-# - heartbeat
+#- heartbeat
 # --------------------------------------------------
 setup_shared_monitoring() {
   echo "⚙ Setting up shared monitoring services and timers..."
@@ -551,6 +652,8 @@ main() {
   ensure_nala
   initial_update
   install_packages
+  setup_age_and_sops
+  ensure_ssh_key
   install_starship
   set_user_environment_defaults
   setup_remote_unlock

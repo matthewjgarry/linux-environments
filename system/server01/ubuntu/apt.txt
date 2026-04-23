@@ -1,3 +1,4 @@
+age
 apparmor
 apport
 apt
@@ -48,6 +49,7 @@ openssh-server
 pollinate
 shim-signed
 software-properties-common
+sops
 stow
 sudo
 systemd

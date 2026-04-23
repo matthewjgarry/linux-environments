@@ -8,6 +8,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MACHINE_ID_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/machine-id"
 WEBHOOK_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/discord-webhook"
+N8N_WEBHOOK_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/n8n-webhook"
 
 # --------------------------------------------------
 # Detect operating system by available package manager
@@ -147,6 +148,40 @@ prompt_discord_webhook() {
 }
 
 # --------------------------------------------------
+# Prompt for n8n webhook
+# - blank input keeps existing value or skips setup
+# --------------------------------------------------
+prompt_n8n_webhook() {
+  local current_webhook new_webhook
+
+  mkdir -p "$(dirname "$N8N_WEBHOOK_FILE")"
+
+  if [[ -f "$N8N_WEBHOOK_FILE" ]]; then
+    current_webhook="$(<"$N8N_WEBHOOK_FILE")"
+  else
+    current_webhook=""
+  fi
+
+  echo
+  echo " n8n webhook configuration"
+  echo " Example:"
+  echo " https://automate.wormlogic.com/webhook/events"
+  echo " Leave blank to keep current value or skip."
+
+  read -r -p "n8n webhook [${current_webhook:-unset}]: " new_webhook
+
+  if [[ -n "$new_webhook" ]]; then
+    printf "%s\n" "$new_webhook" >"$N8N_WEBHOOK_FILE"
+    chmod 600 "$N8N_WEBHOOK_FILE"
+    echo "✓ n8n webhook saved to $N8N_WEBHOOK_FILE"
+  elif [[ -n "$current_webhook" ]]; then
+    echo "✓ Keeping existing n8n webhook"
+  else
+    echo "• No n8n webhook configured"
+  fi
+}
+
+# --------------------------------------------------
 # Set or verify machine identity
 # --------------------------------------------------
 set_machine_id() {
@@ -255,6 +290,7 @@ main() {
 
   prompt_git_config
   prompt_discord_webhook
+  prompt_n8n_webhook
   confirm_execution
 
   echo
