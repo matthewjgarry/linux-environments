@@ -364,7 +364,7 @@ ensure_ssh_key() {
   ssh-keygen -t ed25519 \
     -f "$key_file" \
     -N "" \
-    -C "vps01-$(hostname)"
+    -C "server01-$(hostname)"
 
   chmod 600 "$key_file"
   chmod 644 "$pub_file"
@@ -459,39 +459,10 @@ setup_git_monitoring() {
 }
 
 # --------------------------------------------------
-# Setup remote unlock via SSH (dropbear in initramfs)
-# - allows remote LUKS unlock over SSH during boot
+# Remote unlock is intentionally disabled on VPS
 # --------------------------------------------------
 setup_remote_unlock() {
-  echo " Setting up remote unlock (dropbear-initramfs)..."
-
-  sudo nala install -y dropbear-initramfs
-  sudo mkdir -p /etc/dropbear/initramfs
-
-  if [[ ! -f "$HOME/.ssh/id_ed25519.pub" ]]; then
-    echo "✗ SSH public key missing after generation step"
-    echo " Remote unlock cannot be configured"
-    exit 1
-  fi
-
-  if ! grep -q "^ssh-ed25519 " "$HOME/.ssh/id_ed25519.pub"; then
-    echo "✗ Invalid SSH public key format in $HOME/.ssh/id_ed25519.pub"
-    exit 1
-  fi
-
-  echo "✓ Found SSH key, installing into initramfs"
-  sudo cp "$HOME/.ssh/id_ed25519.pub" /etc/dropbear/initramfs/authorized_keys
-  sudo chmod 600 /etc/dropbear/initramfs/authorized_keys
-  sudo chown root:root /etc/dropbear/initramfs/authorized_keys
-
-  sudo sed -i 's/^#\?IP=.*/IP=dhcp/' /etc/initramfs-tools/initramfs.conf
-
-  sudo tee /etc/dropbear/initramfs/dropbear.conf >/dev/null <<'EOF'
-DROPBEAR_OPTIONS="-p 2222 -s -j -k -I 60"
-EOF
-
-  sudo update-initramfs -u
-  echo "✓ Remote unlock configured"
+  echo "• Remote unlock skipped on VPS"
 }
 
 # --------------------------------------------------

@@ -32,6 +32,7 @@ machine_label() {
   laptop02) echo "HP Envy" ;;
   desktop01) echo "Covid PC" ;;
   server01) echo "Docker Server" ;;
+  vps01) echo "Wormlogic VPS" ;;
   *) echo "Unknown Machine" ;;
   esac
 }
@@ -46,12 +47,13 @@ prompt_machine() {
 
   while true; do
     {
-      echo "🖥  Select target machine:"
-      echo "   1) Dell Precision"
-      echo "   2) HP Envy"
-      echo "   3) Covid PC"
-      echo "   4) Docker Server"
-      echo "   0) Exit"
+      echo " Select target machine:"
+      echo " 1) Dell Precision"
+      echo " 2) HP Envy"
+      echo " 3) Covid PC"
+      echo " 4) Docker Server"
+      echo " 5) Wormlogic VPS"
+      echo " 0) Exit"
     } >&2
 
     read -r -p "Enter choice [0]: " choice >&2
@@ -74,6 +76,10 @@ prompt_machine() {
       echo "server01"
       return 0
       ;;
+    5)
+      echo "vps01"
+      return 0
+      ;;
     0)
       echo "exit"
       return 0
@@ -81,7 +87,7 @@ prompt_machine() {
     *)
       {
         echo "✗ Invalid selection: $choice"
-        echo "  Please choose 0, 1, 2, 3, or 4."
+        echo " Please choose 0, 1, 2, 3, 4, or 5."
         echo
       } >&2
       ;;
