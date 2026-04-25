@@ -29,24 +29,48 @@ $time\
 [ ](fg:color_bg3)\
 $line_break$character"""
 
-palette = 'wormlogic_aurora'
+palette = 'wormlogic_cyber'
 
-[palettes.wormlogic_aurora]
-color_fg0 = '#f0ecff'
-color_bg1 = '#1d1533'
-color_bg3 = '#45355f'
-color_purple = '#8a6cff'
-color_green = '#a1e879'
-color_gold = '#ffd166'
-color_blue = '#6d8dff'
-color_cyan = '#70efe1'
-color_magenta = '#d08cff'
-color_red = '#ff7aa8'
+[palettes.wormlogic_cyber]
+color_fg0 = '#e6e4f0'
+color_bg1 = '#1a1530'
+color_bg3 = '#3a3450'
+color_purple = '#7a5cff'
+color_green = '#8fd46a'
+color_gold = '#f2c35f'
+color_blue = '#7a84ff'
+color_cyan = '#6fe0d8'
+color_magenta = '#b07cff'
+color_red = '#d87aa9'
 
 [os]
 disabled = false
 style = "bg:color_purple fg:color_fg0"
 format = '[ $symbol ]($style)'
+
+[os.symbols]
+Windows = "󰍲"
+Ubuntu = "󰕈"
+SUSE = ""
+Raspbian = "󰐿"
+Mint = "󰣭"
+Macos = "󰀵"
+Manjaro = ""
+Linux = "󰌽"
+Gentoo = "󰣨"
+Fedora = "󰣛"
+Alpine = ""
+Amazon = ""
+Android = ""
+AOSC = ""
+Arch = "󰣇"
+Artix = "󰣇"
+EndeavourOS = ""
+CentOS = ""
+Debian = "󰣚"
+Redhat = "󱄛"
+RedHatEnterprise = "󱄛"
+Pop = ""
 
 [custom.wormlogic]
 command = "printf '{~} wormlogic'"
@@ -62,6 +86,13 @@ style = "fg:color_bg1 bg:color_green"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = "󰝚 "
+"Pictures" = " "
+"Developer" = "󰲋 "
 
 [git_branch]
 symbol = ""

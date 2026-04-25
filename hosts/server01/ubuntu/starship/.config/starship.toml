@@ -45,7 +45,7 @@ color_red = '#c26387'
 
 [os]
 disabled = false
-style = "bg:color_purple fg:color_bg3"
+style = "bg:color_purple fg:color_fg0"
 format = '[ $symbol ]($style)'
 
 [os.symbols]
@@ -86,6 +86,13 @@ style = "fg:color_bg1 bg:color_green"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = "󰝚 "
+"Pictures" = " "
+"Developer" = "󰲋 "
 
 [git_branch]
 symbol = ""
