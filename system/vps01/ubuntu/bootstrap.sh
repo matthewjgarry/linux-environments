@@ -1,19 +1,13 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-# --------------------------------------------------
-# Resolve repo root and machine identity file path
-# --------------------------------------------------
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MACHINE_ID_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/machine-id"
+
 EXPECTED_MACHINE="${1:-vps01}"
 EXPECTED_OS="ubuntu"
 MACHINE_LABEL="Wormlogic VPS"
 
-# --------------------------------------------------
-# Verify machine identity
-# --------------------------------------------------
 verify_machine_id() {
   if [[ ! -f "$MACHINE_ID_FILE" ]]; then
     echo "✗ Missing machine-id file: $MACHINE_ID_FILE"
@@ -33,9 +27,6 @@ verify_machine_id() {
   echo "✓ Machine identity verified: $actual_machine"
 }
 
-# --------------------------------------------------
-# Verify operating system
-# --------------------------------------------------
 verify_os() {
   if ! command -v apt >/dev/null 2>&1; then
     echo "✗ Ubuntu bootstrap called on non-Ubuntu system"
@@ -45,236 +36,95 @@ verify_os() {
   echo "✓ Operating system verified: $EXPECTED_OS"
 }
 
-# --------------------------------------------------
-# Prepare Ubuntu repositories and architecture
-# - universe
-# - multiverse
-# - i386 support
-# - initial apt update/upgrade before switching to nala
-# --------------------------------------------------
 prepare_ubuntu_repos() {
-  echo "📦 Preparing Ubuntu repositories and architecture..."
+  echo "📦 Preparing Ubuntu repositories..."
 
-  sudo apt update
-  sudo apt install -y software-properties-common curl ca-certificates gnupg
+  sudo apt-get update
+  sudo apt-get install -y software-properties-common curl ca-certificates gnupg
 
   sudo add-apt-repository -y universe
   sudo add-apt-repository -y multiverse
-  sudo dpkg --add-architecture i386 || true
 
-  echo "🔄 Performing initial apt update/upgrade before switching to nala..."
-  sudo apt update
-  sudo apt upgrade -y
+  sudo apt-get update
+  sudo apt-get upgrade -y
 
-  echo "✓ Ubuntu repo preparation complete"
+  echo "✓ Ubuntu repositories ready"
 }
 
-# --------------------------------------------------
-# Ensure nala is available
-# --------------------------------------------------
 ensure_nala() {
   if command -v nala >/dev/null 2>&1; then
     echo "✓ nala is available"
     return 0
   fi
 
-  echo "📦 nala not found. Installing nala..."
-  sudo apt install -y nala
-  echo "✓ nala installed"
+  echo "📦 Installing nala..."
+  sudo apt-get install -y nala
 }
 
-# --------------------------------------------------
-# Perform initial system update using nala
-# --------------------------------------------------
+install_docker_repo() {
+  echo "🐳 Configuring Docker apt repository..."
+
+  sudo apt-get update
+  sudo apt-get install -y ca-certificates curl gnupg
+
+  sudo install -m 0755 -d /etc/apt/keyrings
+
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+    sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+  sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+  echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+    sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+
+  sudo apt-get update
+
+  echo "✓ Docker apt repository configured"
+}
+
 initial_update() {
-  echo "🔄 Performing nala update/upgrade..."
+  echo "📦 Running system update..."
   sudo nala update
   sudo nala upgrade -y
 }
 
-# --------------------------------------------------
-# Ensure Flatpak is available and Flathub is configured
-# - only used if flatpak.txt exists
-# --------------------------------------------------
-ensure_flatpak() {
-  if ! command -v flatpak >/dev/null 2>&1; then
-    echo "📦 flatpak not found. Installing flatpak..."
-    sudo nala install -y flatpak
-  else
-    echo "✓ flatpak is available"
-  fi
-
-  if ! flatpak remotes --columns=name 2>/dev/null | grep -qx "flathub"; then
-    echo "🌐 Adding Flathub remote..."
-    flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-  else
-    echo "✓ Flathub remote already configured"
-  fi
-
-  echo "🔄 Updating Flatpak metadata..."
-  flatpak update -y || true
-}
-
-# --------------------------------------------------
-# Ensure snap is available
-# - only used if snap.txt exists
-# --------------------------------------------------
-ensure_snap() {
-  if command -v snap >/dev/null 2>&1; then
-    echo "✓ snap is available"
-    return 0
-  fi
-
-  echo "📦 snap not found. Installing snapd..."
-  sudo nala install -y snapd
-  sudo systemctl enable --now snapd
-
-  echo "✓ snapd installed and enabled"
-}
-
-# --------------------------------------------------
-# Wait for snapd readiness before installing snaps
-# --------------------------------------------------
-wait_for_snap() {
-  echo "⏳ Waiting for snapd to become ready..."
-
-  sudo systemctl enable --now snapd
-
-  for _ in {1..20}; do
-    if snap version >/dev/null 2>&1; then
-      echo "✓ snapd is ready"
-      return 0
-    fi
-    sleep 1
-  done
-
-  echo "⚠ snapd did not become ready in time"
-}
-
-# --------------------------------------------------
-# Ensure Homebrew is available
-# - only used if brew.txt exists
-# --------------------------------------------------
-ensure_brew() {
-  if command -v brew >/dev/null 2>&1; then
-    echo "✓ Homebrew is available"
-    return 0
-  fi
-
-  echo "📦 Homebrew not found. Installing Homebrew..."
-  NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-  if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
-    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-  fi
-
-  echo "✓ Homebrew installed"
-}
-
-# --------------------------------------------------
-# Install packages from machine-specific lists
-# - apt.txt
-# - snap.txt
-# - flatpak.txt
-# - brew.txt
-# --------------------------------------------------
 install_packages() {
   local package_dir="$REPO_ROOT/system/$EXPECTED_MACHINE/$EXPECTED_OS"
   local apt_file="$package_dir/apt.txt"
-  local snap_file="$package_dir/snap.txt"
-  local flatpak_file="$package_dir/flatpak.txt"
-  local brew_file="$package_dir/brew.txt"
 
-  # ----------------------------
-  # APT / Nala packages
-  # ----------------------------
-  if [[ -f "$apt_file" ]]; then
-    echo "📦 Installing packages from $apt_file..."
-    mapfile -t apt_packages <"$apt_file"
-    if ((${#apt_packages[@]} > 0)); then
-      sudo nala install -y "${apt_packages[@]}"
-    else
-      echo "⚠ apt.txt exists but is empty, skipping"
-    fi
-  else
+  if [[ ! -f "$apt_file" ]]; then
     echo "⚠ No apt.txt found at $apt_file, skipping"
+    return 0
   fi
 
-  # ----------------------------
-  # Snap packages
-  # ----------------------------
-  if [[ -f "$snap_file" ]]; then
-    ensure_snap
-    wait_for_snap
+  echo "📦 Installing packages from $apt_file..."
 
-    echo "📦 Installing snap packages from $snap_file..."
-    mapfile -t snap_packages <"$snap_file"
-    if ((${#snap_packages[@]} > 0)); then
-      for pkg in "${snap_packages[@]}"; do
-        sudo snap install "$pkg"
-      done
-    else
-      echo "⚠ snap.txt exists but is empty, skipping"
-    fi
+  mapfile -t apt_packages < <(grep -vE '^\s*(#|$)' "$apt_file")
+
+  if ((${#apt_packages[@]} > 0)); then
+    sudo nala install -y "${apt_packages[@]}"
   else
-    echo "⚠ No snap.txt found at $snap_file, skipping"
+    echo "⚠ apt.txt exists but is empty, skipping"
   fi
-
-  # ----------------------------
-  # Flatpak packages
-  # ----------------------------
-  if [[ -f "$flatpak_file" ]]; then
-    ensure_flatpak
-
-    echo "📦 Installing Flatpak packages from $flatpak_file..."
-    mapfile -t flatpak_packages <"$flatpak_file"
-    if ((${#flatpak_packages[@]} > 0)); then
-      for pkg in "${flatpak_packages[@]}"; do
-        flatpak install -y flathub "$pkg"
-      done
-    else
-      echo "⚠ flatpak.txt exists but is empty, skipping"
-    fi
-  else
-    echo "⚠ No flatpak.txt found at $flatpak_file, skipping"
-  fi
-
-  # ----------------------------
-  # Homebrew packages
-  # ----------------------------
-  if [[ -f "$brew_file" ]]; then
-    ensure_brew
-
-    if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
-      eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-    fi
-
-    echo "📦 Installing Homebrew packages from $brew_file..."
-    mapfile -t brew_packages <"$brew_file"
-    if ((${#brew_packages[@]} > 0)); then
-      brew update
-      brew upgrade
-      for pkg in "${brew_packages[@]}"; do
-        brew install "$pkg" || true
-      done
-    else
-      echo "⚠ brew.txt exists but is empty, skipping"
-    fi
-  else
-    echo "⚠ No brew.txt found at $brew_file, skipping"
-  fi
-
 }
 
-# --------------------------------------------------
-# Setup age + sops for encrypted secrets
-# - expects age to be installed via apt.txt
-# - installs latest sops .deb from GitHub releases
-# - creates the standard SOPS age key location
-# - generates a key only if one does not already exist
-# - locks permissions for private key material
-# - writes the public key to a predictable local file
-#---------------------------------------------------
+install_docker_engine() {
+  echo "🐳 Installing Docker Engine..."
+
+  sudo apt-get install -y \
+    docker-ce \
+    docker-ce-cli \
+    containerd.io \
+    docker-buildx-plugin \
+    docker-compose-plugin
+
+  sudo systemctl enable --now docker
+  sudo usermod -aG docker "$USER" || true
+
+  echo "✓ Docker Engine installed"
+}
+
 setup_age_and_sops() {
   local age_base_dir="${XDG_CONFIG_HOME:-$HOME/.config}/sops"
   local age_dir="$age_base_dir/age"
@@ -284,15 +134,15 @@ setup_age_and_sops() {
   local public_key=""
   local sops_version=""
 
-  echo " Setting up age + sops..."
+  echo "🔐 Setting up age + sops..."
 
   if ! command -v age-keygen >/dev/null 2>&1; then
-    echo "✗ age-keygen not found. Make sure 'age' is present in system/$EXPECTED_MACHINE/$EXPECTED_OS/apt.txt"
+    echo "✗ age-keygen not found. Make sure 'age' is in apt.txt"
     exit 1
   fi
 
   if ! command -v sops >/dev/null 2>&1; then
-    echo " Installing sops..."
+    echo "🔐 Installing sops..."
     sops_version="$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep tag_name | cut -d'"' -f4)"
 
     if [[ -z "$sops_version" ]]; then
@@ -300,20 +150,17 @@ setup_age_and_sops() {
       exit 1
     fi
 
-    curl -Lo sops.deb "https://github.com/getsops/sops/releases/download/${sops_version}/sops_${sops_version#v}_amd64.deb"
-    sudo dpkg -i sops.deb
-    rm -f sops.deb
-    echo "✓ sops installed"
+    curl -Lo /tmp/sops.deb "https://github.com/getsops/sops/releases/download/${sops_version}/sops_${sops_version#v}_amd64.deb"
+    sudo dpkg -i /tmp/sops.deb
+    rm -f /tmp/sops.deb
   else
     echo "✓ sops already installed"
   fi
 
   mkdir -p "$age_dir"
-  chmod 700 "$age_base_dir"
-  chmod 700 "$age_dir"
+  chmod 700 "$age_base_dir" "$age_dir"
 
   if [[ ! -f "$key_file" ]]; then
-    echo " No age key found. Generating..."
     age-keygen -o "$key_file"
     echo "✓ age key generated"
   else
@@ -334,184 +181,120 @@ setup_age_and_sops() {
   chmod 600 "$public_key_file"
 
   echo "✓ age + sops ready"
-  echo " Public key: $public_key"
-  echo " Private key: $key_file"
+  echo "  Public key:  $public_key"
+  echo "  Private key: $key_file"
 }
 
-# --------------------------------------------------
-# Ensure SSH key exists for remote unlock
-# - generates ed25519 key if missing
-# - non-interactive
-# - safe (does not overwrite existing keys)
-# --------------------------------------------------
 ensure_ssh_key() {
   local ssh_dir="$HOME/.ssh"
   local key_file="$ssh_dir/id_ed25519"
   local pub_file="${key_file}.pub"
 
-  echo " Checking for SSH key..."
+  echo "🔑 Checking for SSH key..."
 
   mkdir -p "$ssh_dir"
   chmod 700 "$ssh_dir"
 
   if [[ -f "$pub_file" ]]; then
-    echo "✓ SSH key already exists"
+    echo "✓ SSH public key already exists"
     return 0
   fi
 
-  echo " No SSH key found. Generating..."
+  if [[ -f "$key_file" ]]; then
+    ssh-keygen -y -f "$key_file" > "$pub_file"
+    chmod 644 "$pub_file"
+    echo "✓ SSH public key regenerated from private key"
+    return 0
+  fi
 
-  ssh-keygen -t ed25519 \
-    -f "$key_file" \
-    -N "" \
-    -C "server01-$(hostname)"
-
+  ssh-keygen -t ed25519 -f "$key_file" -N "" -C "vps01-$(hostname)"
   chmod 600 "$key_file"
   chmod 644 "$pub_file"
 
   echo "✓ SSH key generated"
-  echo " Public key:"
-  cat "$pub_file"
 }
 
-# --------------------------------------------------
-# Set default user environment
-# - PATH
-# - editor
-# - no GUI defaults on server
-# --------------------------------------------------
-set_user_environment_defaults() {
-  echo "🌱 Setting user environment defaults..."
-
-  mkdir -p "$HOME/.config/environment.d"
-  mkdir -p "$HOME/.local/bin"
-
-  cat >"$HOME/.config/environment.d/path.conf" <<EOF
-PATH=$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin
-EOF
-
-  cat >"$HOME/.config/environment.d/defaults.conf" <<EOF
-EDITOR=nvim
-VISUAL=nvim
-EOF
-
-  if command -v nvim >/dev/null 2>&1; then
-    git config --global core.editor "nvim"
-    git config --global sequence.editor "nvim"
-    echo "✓ Git editor set to nvim"
-  else
-    echo "⚠ nvim not found, skipping git editor config"
-  fi
-
-  echo "✓ Environment defaults configured"
-}
-
-# --------------------------------------------------
-# Install and enable package export service/timer
-# --------------------------------------------------
-setup_package_export() {
-  echo "⚙ Setting up package export service and timer..."
-
-  mkdir -p "$HOME/.config/systemd/user"
-  cp "$REPO_ROOT/systemd/package-export.service" "$HOME/.config/systemd/user/"
-  cp "$REPO_ROOT/systemd/package-export.timer" "$HOME/.config/systemd/user/"
-
-  systemctl --user daemon-reload
-  systemctl --user enable --now package-export.timer
-  systemctl --user start package-export.service || true
-
-  echo "✓ package export service and timer configured"
-}
-
-# --------------------------------------------------
-# Install and enable shared system update service/timer
-# --------------------------------------------------
-setup_system_update() {
-  echo "⚙ Setting up system update service and timer..."
-
-  mkdir -p "$HOME/.config/systemd/user"
-  cp "$REPO_ROOT/systemd/system-update.service" "$HOME/.config/systemd/user/"
-  cp "$REPO_ROOT/systemd/system-update.timer" "$HOME/.config/systemd/user/"
-
-  systemctl --user daemon-reload
-  systemctl --user enable --now system-update.timer
-
-  echo "✓ system-update.timer enabled"
-}
-
-# --------------------------------------------------
-# Install and enable git monitoring services/timers
-# --------------------------------------------------
-setup_git_monitoring() {
-  echo "⚙ Setting up git monitoring services and timers..."
-
-  mkdir -p "$HOME/.config/systemd/user"
-  cp "$REPO_ROOT/systemd/repo-update-check.service" "$HOME/.config/systemd/user/"
-  cp "$REPO_ROOT/systemd/repo-update-check.timer" "$HOME/.config/systemd/user/"
-  cp "$REPO_ROOT/systemd/dotfiles-change-check.service" "$HOME/.config/systemd/user/"
-  cp "$REPO_ROOT/systemd/dotfiles-change-check.timer" "$HOME/.config/systemd/user/"
-
-  systemctl --user daemon-reload
-  systemctl --user enable --now repo-update-check.timer
-  systemctl --user enable --now dotfiles-change-check.timer
-
-  echo "✓ Git monitoring timers enabled"
-}
-
-# --------------------------------------------------
-# Remote unlock is intentionally disabled on VPS
-# --------------------------------------------------
-setup_remote_unlock() {
-  echo "• Remote unlock skipped on VPS"
-}
-
-# --------------------------------------------------
-# Install and enable shared monitoring services/timers
-# - disk-space-check
-#- heartbeat
-# --------------------------------------------------
-setup_shared_monitoring() {
-  echo "⚙ Setting up shared monitoring services and timers..."
-
-  mkdir -p "$HOME/.config/systemd/user"
-
-  cp "$REPO_ROOT/systemd/disk-space-check.service" "$HOME/.config/systemd/user/"
-  cp "$REPO_ROOT/systemd/disk-space-check.timer" "$HOME/.config/systemd/user/"
-  cp "$REPO_ROOT/systemd/heartbeat.service" "$HOME/.config/systemd/user/"
-  cp "$REPO_ROOT/systemd/heartbeat.timer" "$HOME/.config/systemd/user/"
-
-  systemctl --user daemon-reload
-  systemctl --user enable --now disk-space-check.timer
-  systemctl --user enable --now heartbeat.timer
-
-  echo "✓ Shared monitoring timers enabled"
-}
-
-# --------------------------------------------------
-# Install Starship prompt
-# --------------------------------------------------
 install_starship() {
   if command -v starship >/dev/null 2>&1; then
     echo "✓ starship already installed"
     return 0
   fi
 
-  if ! command -v curl >/dev/null 2>&1; then
-    echo "✗ curl is required to install starship"
-    exit 1
-  fi
-
-  echo "🚀 Installing starship..."
+  echo "⭐ Installing starship..."
   curl -sS https://starship.rs/install.sh | sh -s -- -y
-
-  echo "✓ starship installed"
 }
 
-# --------------------------------------------------
-# Prepare shell dotfiles for stow
-# - back up regular files
-# - leave symlinks alone
-# --------------------------------------------------
+set_user_environment_defaults() {
+  echo "⚙ Setting user environment defaults..."
+
+  mkdir -p "$HOME/.config/environment.d"
+  mkdir -p "$HOME/.local/bin"
+
+  cat >"$HOME/.config/environment.d/path.conf" <<'ENVEOF'
+PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
+ENVEOF
+
+  cat >"$HOME/.config/environment.d/defaults.conf" <<'ENVEOF'
+EDITOR=nvim
+VISUAL=nvim
+BROWSER=firefox
+ENVEOF
+
+  if command -v git >/dev/null 2>&1 && command -v nvim >/dev/null 2>&1; then
+    git config --global core.editor "nvim"
+    git config --global sequence.editor "nvim"
+  fi
+
+  echo "✓ Environment defaults configured"
+}
+
+user_systemd_available() {
+  systemctl --user status >/dev/null 2>&1
+}
+
+setup_user_service_pair() {
+  local name="$1"
+
+  if ! user_systemd_available; then
+    echo "⚠ User systemd unavailable; skipping $name"
+    return 0
+  fi
+
+  mkdir -p "$HOME/.config/systemd/user"
+
+  cp "$REPO_ROOT/systemd/${name}.service" "$HOME/.config/systemd/user/"
+  cp "$REPO_ROOT/systemd/${name}.timer" "$HOME/.config/systemd/user/"
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now "${name}.timer"
+}
+
+setup_package_export() {
+  echo "⚙ Setting up package export service and timer..."
+  setup_user_service_pair "package-export"
+}
+
+setup_system_update() {
+  echo "⚙ Setting up system update service and timer..."
+  setup_user_service_pair "system-update"
+}
+
+setup_git_monitoring() {
+  echo "⚙ Setting up git monitoring services and timers..."
+  setup_user_service_pair "repo-update-check"
+  setup_user_service_pair "dotfiles-change-check"
+}
+
+setup_shared_monitoring() {
+  echo "⚙ Setting up shared monitoring services and timers..."
+  setup_user_service_pair "disk-space-check"
+  setup_user_service_pair "heartbeat"
+}
+
+setup_remote_unlock() {
+  echo "• Remote unlock skipped on VPS"
+}
+
 prepare_shell_dotfiles() {
   local backup_dir="$HOME/.dotfile-backups/$(date +%Y%m%d-%H%M%S)"
   local files=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_logout")
@@ -520,28 +303,20 @@ prepare_shell_dotfiles() {
 
   for file in "${files[@]}"; do
     if [[ -L "$file" ]]; then
-      echo "✓ $file is already a symlink, leaving it alone"
+      echo "✓ $file is already a symlink"
     elif [[ -f "$file" ]]; then
       mkdir -p "$backup_dir"
       mv "$file" "$backup_dir/"
-      echo "✓ Backed up $(basename "$file") to $backup_dir"
-    else
-      echo "• $file not present, nothing to do"
+      echo "✓ Backed up $(basename "$file")"
     fi
   done
 }
 
-# --------------------------------------------------
-# Apply bash via stow only
-# --------------------------------------------------
 apply_bash_stow() {
-  echo "🔗 Stowing bash config..."
+  echo "🐚 Stowing bash config..."
   stow -d "$REPO_ROOT/stow" -t "$HOME" bash
 }
 
-# --------------------------------------------------
-# Apply host-specific environment overrides
-# --------------------------------------------------
 apply_host_environment() {
   local host_dir="$REPO_ROOT/hosts/$EXPECTED_MACHINE/$EXPECTED_OS"
 
@@ -550,35 +325,31 @@ apply_host_environment() {
     return 0
   fi
 
-  echo "🌱 Applying host-specific environment from $host_dir..."
+  echo "⚙ Applying host-specific environment from $host_dir..."
 
   for dir in "$host_dir"/*; do
     if [[ -d "$dir" ]]; then
       local name
       name="$(basename "$dir")"
-      echo "🔗 Stowing host package: $name"
       stow -d "$host_dir" -t "$HOME" "$name"
     fi
   done
 }
 
-# --------------------------------------------------
-# Run initial package export
-# --------------------------------------------------
 run_package_export() {
-  echo "📝 Exporting current package state..."
-  "$REPO_ROOT/scripts/package-export.sh"
+  if [[ -x "$REPO_ROOT/scripts/package-export.sh" ]]; then
+    echo "📦 Exporting current package state..."
+    "$REPO_ROOT/scripts/package-export.sh"
+  else
+    echo "⚠ package-export.sh not found or not executable, skipping"
+  fi
 }
 
-# --------------------------------------------------
-# Display final summary
-# --------------------------------------------------
 show_summary() {
   local git_name git_email local_ip
-
   git_name="$(git config --global user.name || echo "unset")"
   git_email="$(git config --global user.email || echo "unset")"
-  local_ip="$( (ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") {print $(i+1); exit}}') || true)"
+  local_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") {print $(i+1); exit}}' || true)"
   local_ip="${local_ip:-unavailable}"
 
   echo
@@ -586,12 +357,6 @@ show_summary() {
   echo "✓ Bootstrap complete for $MACHINE_LABEL ($EXPECTED_MACHINE)"
   echo "=================================================="
   echo
-
-  if command -v neofetch >/dev/null 2>&1; then
-    neofetch
-    echo
-  fi
-
   echo "Git user:"
   echo "  Name:  $git_name"
   echo "  Email: $git_email"
@@ -599,20 +364,26 @@ show_summary() {
   echo "Local IP:"
   echo "  $local_ip"
   echo
+  echo "Services configured:"
+  echo "  - package-export       → state tracking"
+  echo "  - system-update        → scheduled system maintenance"
+  echo "  - repo-update-check    → remote update awareness"
+  echo "  - dotfiles-change-check → local dotfiles drift awareness"
+  echo "  - disk-space-check     → local disk usage warning"
+  echo "  - heartbeat            → device online signal"
+  echo "  - remote-unlock        → skipped on VPS"
+  echo
+  echo "Docker:"
+  docker --version || true
+  docker compose version || true
 }
 
-# --------------------------------------------------
-# Prompt for reboot
-# --------------------------------------------------
 prompt_reboot() {
-  echo "Press Enter to reboot..."
-  read -r
+  echo
+  read -r -p "Press Enter to reboot, or Ctrl+C to skip..."
   sudo reboot
 }
 
-# --------------------------------------------------
-# Main bootstrap flow
-# --------------------------------------------------
 main() {
   echo "🚀 Starting bootstrap for $MACHINE_LABEL ($EXPECTED_MACHINE)..."
   echo
@@ -621,8 +392,10 @@ main() {
   verify_os
   prepare_ubuntu_repos
   ensure_nala
+  install_docker_repo
   initial_update
   install_packages
+  install_docker_engine
   setup_age_and_sops
   ensure_ssh_key
   install_starship
@@ -637,18 +410,6 @@ main() {
   apply_host_environment
   run_package_export
   show_summary
-
-  echo
-  echo "📊 Services configured:"
-  echo "   - package-export        → state tracking (runs now + daily)"
-  echo "   - system-update         → system maintenance (scheduled)"
-  echo "   - repo-update-check     → remote update awareness (daily)"
-  echo "   - dotfiles-change-check → local dotfiles drift awareness (daily)"
-  echo "   - disk-space-check      → local disk usage warning (daily)"
-  echo "   - heartbeat             → device online signal (daily)"
-  echo "   - remote-unlock         → SSH unlock via initramfs (port 2222)"
-  echo
-
   prompt_reboot
 }
 

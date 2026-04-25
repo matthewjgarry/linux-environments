@@ -10,17 +10,10 @@ bsdutils
 btrfs-progs
 ca-certificates
 cloud-init
-containerd.io
-cryptsetup
 curl
 dash
 dbus
 diffutils
-docker-buildx-plugin
-docker-ce
-docker-ce-cli
-docker-compose-plugin
-dropbear-initramfs
 e2fsprogs
 efibootmgr
 findutils
@@ -49,13 +42,11 @@ openssh-server
 pollinate
 shim-signed
 software-properties-common
-sops
 stow
 sudo
 systemd
 systemd-resolved
 systemd-sysv
-ubuntu-drivers-common
 ubuntu-keyring
 ubuntu-minimal
 ubuntu-release-upgrader-core
@@ -65,5 +56,4 @@ udev
 unattended-upgrades
 unminimize
 util-linux
-wpasupplicant
 xfsprogs
