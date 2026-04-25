@@ -117,7 +117,9 @@
       <eventcontext
          id="rect"
          style="fill:blue;"
-         usecurrent="1" />
+         usecurrent="1"
+         width="2048"
+         height="512" />
       <eventcontext
          id="3dbox"
          style="stroke:none;stroke-linejoin:round;"
@@ -152,7 +154,9 @@
          style="fill:red;"
          end="0"
          start="0"
-         usecurrent="1" />
+         usecurrent="1"
+         rx="512"
+         ry="512" />
       <eventcontext
          id="star"
          magnitude="5"
@@ -304,7 +308,7 @@
        id="lpetool"
        mode="drag"
        style="fill:#ff0000;fill-opacity:1;fill-rule:nonzero;stroke:none;"
-       unit="mm" />
+       unit="px" />
     <eventcontext
        id="text"
        usecurrent="1"
@@ -396,7 +400,8 @@
     <eventcontext
        id="connector"
        style="fill:none;fill-rule:evenodd;stroke:black;stroke-opacity:1;stroke-linejoin:miter;stroke-width:1px;stroke-linecap:butt;"
-       selcue="1" />
+       selcue="1"
+       curvature="0" />
     <eventcontext
        id="paintbucket"
        style="fill:#a0a0a0;stroke:none;"
@@ -549,6 +554,8 @@
     <group
        id="CMS"
        visible="1" />
+    <group
+       id="OKHSL" />
   </group>
   <group
      id="embedded">
@@ -614,17 +621,22 @@
        append_extension="1"
        path="">
       <group
-         id="exportarea" />
+         id="exportarea"
+         value="selection" />
       <group
          id="defaultxdpi" />
+      <group
+         id="batchexportarea"
+         value="layer" />
     </group>
     <group
        id="save_as"
        default="org.inkscape.output.svg.inkscape"
        append_extension="1"
        enable_preview="1"
-       path=""
-       use_current_dir="1" />
+       path="/home/lightweight/Pictures"
+       use_current_dir="1"
+       enable_svgexport="0" />
     <group
        id="save_copy"
        default=""
@@ -634,15 +646,16 @@
     <group
        id="open"
        enable_preview="1"
-       path="" />
+       path="/home/lightweight/Downloads/" />
     <group
        id="import"
        enable_preview="1"
-       path=""
+       path="/home/lightweight/Downloads/"
        ask="1"
        ask_svg="1"
-       link="link"
-       scale="optimizeSpeed" />
+       link="embed"
+       scale="auto"
+       forcexdpi="0" />
     <group
        id="clonetiler"
        dotrace="0" />
@@ -694,7 +707,8 @@
   </group>
   <group
      id="options"
-     rotationlock="1">
+     rotationlock="1"
+     onungroup="0">
     <group
        id="renderingcache"
        size="512" />
@@ -727,7 +741,7 @@
        value="12" />
     <group
        id="cursortolerance"
-       value="8.0" />
+       value="8" />
     <group
        id="dragtolerance"
        value="4.0" />
@@ -867,7 +881,8 @@
     <group
        id="maskobject"
        topmost="1"
-       remove="1" />
+       remove="1"
+       grouping="0" />
     <group
        id="blurquality"
        value="0" />
@@ -974,6 +989,38 @@
        id="threading" />
     <group
        id="ruler" />
+    <group
+       id="snapping"
+       snap-bbox="1"
+       snap-bbox-edge="1"
+       snap-bbox-corner="1"
+       snap-bbox-edge-midpoint="0"
+       snap-bbox-center="0"
+       simple-snap-bbox="1"
+       snap-node-category="1"
+       snap-path="1"
+       snap-path-intersection="0"
+       snap-node-cusp="1"
+       snap-node-smooth="1"
+       snap-line-midpoint="1"
+       snap-line-tangential="0"
+       snap-line-perpendicular="0"
+       simple-snap-nodes="1"
+       snap-alignment="0"
+       snap-alignment-self="0"
+       snap-distribution="0"
+       simple-snap-alignment="0"
+       snap-others="1"
+       snap-object-midpoint="0"
+       snap-rotation-center="0"
+       snap-text-baseline="1"
+       snap-path-mask="1"
+       snap-path-clip="1"
+       snap-page-border="1"
+       snap-page-margin="1"
+       snap-grid="1"
+       snap-grid-line="1"
+       snap-guide="1" />
   </group>
   <group
      id="extensions"
@@ -982,10 +1029,10 @@
      org.inkscape.output.png.inkscape.png_antialias="2" />
   <group
      id="desktop"
-     style="fill:#000000;text-orientation:auto">
+     style="fill:#74a253;text-orientation:auto;stroke-width:1.0015748">
     <group
-       width="2004"
-       height="1089"
+       width="1078"
+       height="538"
        x="0"
        y="0"
        maximized="1"
@@ -1104,8 +1151,8 @@
   <group
      id="theme"
      defaultPreferDarkTheme="0"
-     defaultIconTheme="Adwaita"
-     defaultGtkTheme="Adwaita"
+     defaultIconTheme="Dracula"
+     defaultGtkTheme="Dracula"
      narrowSpinButton="1"
      preferDarkTheme="1"
      darkTheme="1"
