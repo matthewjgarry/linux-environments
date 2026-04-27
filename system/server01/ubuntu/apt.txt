@@ -32,6 +32,7 @@ grub-efi-amd64-signed
 gzip
 hostname
 init
+iptables-persistent
 jq
 linux-generic
 login
@@ -65,5 +66,7 @@ udev
 unattended-upgrades
 unminimize
 util-linux
+wireguard
+wireguard-tools
 wpasupplicant
 xfsprogs

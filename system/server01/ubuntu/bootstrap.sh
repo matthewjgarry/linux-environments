@@ -543,6 +543,7 @@ setup_wormlogic_vpn() {
   local vpn_name="wormlogic"
   local vps_host="vpn.wormlogic.com"
   local vpn_allowed_ips="10.8.0.0/24"
+  local vpn_subnet="10.8.0.0/24"
   local machine_id_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/machine-id"
 
   local machine_id
@@ -602,7 +603,6 @@ setup_wormlogic_vpn() {
     source "$settings_file"
   fi
 
-  # --- VPS PUBLIC KEY (prompt once) ---
   if [[ -z "${WORMLOGIC_VPS_PUBLIC_KEY:-}" ]]; then
     echo
     echo "Enter VPS WireGuard public key."
@@ -612,7 +612,6 @@ setup_wormlogic_vpn() {
     read -r -p "VPS public key: " WORMLOGIC_VPS_PUBLIC_KEY
   fi
 
-  # --- VPN IP (prompt with default) ---
   local default_vpn_ip="10.8.0.2/32"
   if [[ -z "${WORMLOGIC_VPN_IP:-}" ]]; then
     echo
@@ -620,7 +619,6 @@ setup_wormlogic_vpn() {
     WORMLOGIC_VPN_IP="${input_vpn_ip:-$default_vpn_ip}"
   fi
 
-  # --- AUTO-DETECT LAN INTERFACE ---
   if [[ -z "${WORMLOGIC_LAN_INTERFACE:-}" ]]; then
     homelab_lan_interface="$(
       ip -4 route show default |
@@ -635,7 +633,6 @@ setup_wormlogic_vpn() {
     WORMLOGIC_LAN_INTERFACE="$homelab_lan_interface"
   fi
 
-  # --- AUTO-DETECT LAN CIDR ---
   if [[ -z "${WORMLOGIC_LAN_CIDR:-}" ]]; then
     homelab_lan_cidr="$(
       ip -4 route show dev "$WORMLOGIC_LAN_INTERFACE" proto kernel scope link |
@@ -658,7 +655,6 @@ setup_wormlogic_vpn() {
   homelab_lan_cidr="$WORMLOGIC_LAN_CIDR"
   homelab_lan_interface="$WORMLOGIC_LAN_INTERFACE"
 
-  # --- VALIDATION ---
   if ! printf '%s' "$vps_public_key" | wg pubkey >/dev/null 2>&1; then
     echo "✗ Invalid VPS public key"
     exit 1
@@ -679,7 +675,6 @@ setup_wormlogic_vpn() {
     exit 1
   fi
 
-  # --- SAVE SETTINGS (UNTRACKED) ---
   {
     echo "WORMLOGIC_VPS_PUBLIC_KEY='$vps_public_key'"
     echo "WORMLOGIC_VPN_IP='$homelab_vpn_ip'"
@@ -707,10 +702,6 @@ setup_wormlogic_vpn() {
 
   chmod 600 "$source_conf"
 
-  echo "• Enabling IPv4 forwarding..."
-  echo "net.ipv4.ip_forward=1" | sudo tee /etc/sysctl.d/99-wormlogic-forwarding.conf >/dev/null
-  sudo sysctl --system >/dev/null
-
   echo "• Installing config to: $target_conf"
 
   sudo install -d -m 700 /etc/wireguard
@@ -718,15 +709,39 @@ setup_wormlogic_vpn() {
 
   sudo systemctl enable --now "wg-quick@$vpn_name"
 
+  echo "• Configuring VPN gateway routing..."
+
+  sudo tee /etc/sysctl.d/99-wormlogic.conf >/dev/null <<EOF
+net.ipv4.ip_forward=1
+net.ipv4.conf.all.rp_filter=0
+net.ipv4.conf.default.rp_filter=0
+net.ipv4.conf.${vpn_name}.rp_filter=0
+net.ipv4.conf.${homelab_lan_interface}.rp_filter=0
+EOF
+
+  sudo sysctl --system >/dev/null
+
+  sudo iptables -C FORWARD -i "$vpn_name" -o "$homelab_lan_interface" -s "$vpn_subnet" -j ACCEPT 2>/dev/null || \
+    sudo iptables -I FORWARD 1 -i "$vpn_name" -o "$homelab_lan_interface" -s "$vpn_subnet" -j ACCEPT
+
+  sudo iptables -C FORWARD -i "$homelab_lan_interface" -o "$vpn_name" -d "$vpn_subnet" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+    sudo iptables -I FORWARD 2 -i "$homelab_lan_interface" -o "$vpn_name" -d "$vpn_subnet" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+  sudo iptables -t nat -C POSTROUTING -s "$vpn_subnet" -o "$homelab_lan_interface" -j MASQUERADE 2>/dev/null || \
+    sudo iptables -t nat -A POSTROUTING -s "$vpn_subnet" -o "$homelab_lan_interface" -j MASQUERADE
+
   WORMLOGIC_VPN_MACHINE_ID="$machine_id"
   WORMLOGIC_VPN_PUBLIC_KEY="$(<"$public_key_file")"
   WORMLOGIC_VPN_IP="$homelab_vpn_ip"
   WORMLOGIC_LAN_CIDR="$homelab_lan_cidr"
 
   echo "✓ Wormlogic homelab gateway configured"
-  echo "  Machine:  $machine_id"
-  echo "  VPN IP:   $homelab_vpn_ip"
-  echo "  LAN CIDR: $homelab_lan_cidr"
+  echo "  Machine:       $machine_id"
+  echo "  VPN IP:        $homelab_vpn_ip"
+  echo "  LAN CIDR:      $homelab_lan_cidr"
+  echo "  LAN Interface: $homelab_lan_interface"
+  echo "  Source config: $source_conf"
+  echo "  System config: $target_conf"
 }
 
 # --------------------------------------------------
