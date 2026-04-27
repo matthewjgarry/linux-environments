@@ -330,7 +330,7 @@ setup_age_and_sops() {
   fi
 
   mkdir -p "$dotfiles_dir"
-  printf '%s\n' "$public_key" > "$public_key_file"
+  printf '%s\n' "$public_key" >"$public_key_file"
   chmod 600 "$public_key_file"
 
   echo "✓ age + sops ready"
@@ -537,6 +537,199 @@ install_starship() {
 }
 
 # --------------------------------------------------
+# Setup Wormlogic WireGuard homelab gateway
+# --------------------------------------------------
+setup_wormlogic_vpn() {
+  local vpn_name="wormlogic"
+  local vps_host="vpn.wormlogic.com"
+  local vpn_allowed_ips="10.8.0.0/24"
+  local machine_id_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/machine-id"
+
+  local machine_id
+  local local_dir
+  local private_key_file
+  local public_key_file
+  local source_conf
+  local target_conf
+  local settings_file
+
+  local homelab_private_key
+  local homelab_vpn_ip
+  local homelab_lan_cidr
+  local homelab_lan_interface
+  local vps_public_key
+
+  echo "🔐 Setting up Wormlogic WireGuard homelab gateway..."
+
+  if [[ ! -f "$machine_id_file" ]]; then
+    echo "✗ Missing machine-id file: $machine_id_file"
+    exit 1
+  fi
+
+  machine_id="$(<"$machine_id_file")"
+
+  local_dir="$REPO_ROOT/local/wireguard"
+  private_key_file="$local_dir/${machine_id}.key"
+  public_key_file="$local_dir/${machine_id}.pub"
+  source_conf="$local_dir/$vpn_name.conf"
+  target_conf="/etc/wireguard/$vpn_name.conf"
+  settings_file="$local_dir/$vpn_name.env"
+
+  if ! command -v wg >/dev/null 2>&1; then
+    echo "✗ wg not found. wireguard-tools must be installed first."
+    exit 1
+  fi
+
+  mkdir -p "$local_dir"
+  chmod 700 "$REPO_ROOT/local" "$local_dir"
+
+  if [[ ! -f "$private_key_file" ]]; then
+    echo "• Generating WireGuard key for $machine_id..."
+    wg genkey | tee "$private_key_file" | wg pubkey >"$public_key_file"
+    chmod 600 "$private_key_file"
+    chmod 644 "$public_key_file"
+  else
+    echo "✓ Existing WireGuard key found for $machine_id"
+
+    if [[ ! -f "$public_key_file" ]]; then
+      wg pubkey <"$private_key_file" >"$public_key_file"
+      chmod 644 "$public_key_file"
+    fi
+  fi
+
+  if [[ -f "$settings_file" ]]; then
+    # shellcheck disable=SC1090
+    source "$settings_file"
+  fi
+
+  # --- VPS PUBLIC KEY (prompt once) ---
+  if [[ -z "${WORMLOGIC_VPS_PUBLIC_KEY:-}" ]]; then
+    echo
+    echo "Enter VPS WireGuard public key."
+    echo "Get it from the VPS with:"
+    echo "  sudo awk '/PrivateKey/ {print \$3}' /etc/wireguard/wg0.conf | wg pubkey"
+    echo
+    read -r -p "VPS public key: " WORMLOGIC_VPS_PUBLIC_KEY
+  fi
+
+  # --- VPN IP (prompt with default) ---
+  local default_vpn_ip="10.8.0.2/32"
+  if [[ -z "${WORMLOGIC_VPN_IP:-}" ]]; then
+    echo
+    read -r -p "server01 VPN IP [$default_vpn_ip]: " input_vpn_ip
+    WORMLOGIC_VPN_IP="${input_vpn_ip:-$default_vpn_ip}"
+  fi
+
+  # --- AUTO-DETECT LAN INTERFACE ---
+  if [[ -z "${WORMLOGIC_LAN_INTERFACE:-}" ]]; then
+    homelab_lan_interface="$(
+      ip -4 route show default |
+        awk 'NR==1 {for (i=1;i<=NF;i++) if ($i=="dev") print $(i+1)}'
+    )"
+
+    if [[ -z "$homelab_lan_interface" ]]; then
+      echo "✗ Could not auto-detect LAN interface"
+      exit 1
+    fi
+
+    WORMLOGIC_LAN_INTERFACE="$homelab_lan_interface"
+  fi
+
+  # --- AUTO-DETECT LAN CIDR ---
+  if [[ -z "${WORMLOGIC_LAN_CIDR:-}" ]]; then
+    homelab_lan_cidr="$(
+      ip -4 route show dev "$WORMLOGIC_LAN_INTERFACE" proto kernel scope link |
+        awk 'NR==1 {print $1}'
+    )"
+
+    if [[ -z "$homelab_lan_cidr" ]]; then
+      echo "✗ Could not auto-detect LAN CIDR"
+      exit 1
+    fi
+
+    WORMLOGIC_LAN_CIDR="$homelab_lan_cidr"
+  fi
+
+  echo "• LAN interface: $WORMLOGIC_LAN_INTERFACE"
+  echo "• LAN CIDR:      $WORMLOGIC_LAN_CIDR"
+
+  vps_public_key="$WORMLOGIC_VPS_PUBLIC_KEY"
+  homelab_vpn_ip="$WORMLOGIC_VPN_IP"
+  homelab_lan_cidr="$WORMLOGIC_LAN_CIDR"
+  homelab_lan_interface="$WORMLOGIC_LAN_INTERFACE"
+
+  # --- VALIDATION ---
+  if ! printf '%s' "$vps_public_key" | wg pubkey >/dev/null 2>&1; then
+    echo "✗ Invalid VPS public key"
+    exit 1
+  fi
+
+  if [[ ! "$homelab_vpn_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+    echo "✗ Invalid VPN IP: $homelab_vpn_ip"
+    exit 1
+  fi
+
+  if [[ ! "$homelab_lan_cidr" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+    echo "✗ Invalid LAN CIDR: $homelab_lan_cidr"
+    exit 1
+  fi
+
+  if ! ip link show "$homelab_lan_interface" >/dev/null 2>&1; then
+    echo "✗ Interface not found: $homelab_lan_interface"
+    exit 1
+  fi
+
+  # --- SAVE SETTINGS (UNTRACKED) ---
+  {
+    echo "WORMLOGIC_VPS_PUBLIC_KEY='$vps_public_key'"
+    echo "WORMLOGIC_VPN_IP='$homelab_vpn_ip'"
+    echo "WORMLOGIC_LAN_CIDR='$homelab_lan_cidr'"
+    echo "WORMLOGIC_LAN_INTERFACE='$homelab_lan_interface'"
+  } >"$settings_file"
+
+  chmod 600 "$settings_file"
+
+  homelab_private_key="$(<"$private_key_file")"
+
+  echo "• Writing WireGuard config: $source_conf"
+
+  {
+    echo "[Interface]"
+    echo "PrivateKey = $homelab_private_key"
+    echo "Address = $homelab_vpn_ip"
+    echo
+    echo "[Peer]"
+    echo "PublicKey = $vps_public_key"
+    echo "Endpoint = $vps_host:51820"
+    echo "AllowedIPs = $vpn_allowed_ips"
+    echo "PersistentKeepalive = 25"
+  } >"$source_conf"
+
+  chmod 600 "$source_conf"
+
+  echo "• Enabling IPv4 forwarding..."
+  echo "net.ipv4.ip_forward=1" | sudo tee /etc/sysctl.d/99-wormlogic-forwarding.conf >/dev/null
+  sudo sysctl --system >/dev/null
+
+  echo "• Installing config to: $target_conf"
+
+  sudo install -d -m 700 /etc/wireguard
+  sudo install -m 600 "$source_conf" "$target_conf"
+
+  sudo systemctl enable --now "wg-quick@$vpn_name"
+
+  WORMLOGIC_VPN_MACHINE_ID="$machine_id"
+  WORMLOGIC_VPN_PUBLIC_KEY="$(<"$public_key_file")"
+  WORMLOGIC_VPN_IP="$homelab_vpn_ip"
+  WORMLOGIC_LAN_CIDR="$homelab_lan_cidr"
+
+  echo "✓ Wormlogic homelab gateway configured"
+  echo "  Machine:  $machine_id"
+  echo "  VPN IP:   $homelab_vpn_ip"
+  echo "  LAN CIDR: $homelab_lan_cidr"
+}
+
+# --------------------------------------------------
 # Prepare shell dotfiles for stow
 # - back up regular files
 # - leave symlinks alone
@@ -628,6 +821,26 @@ show_summary() {
   echo "Local IP:"
   echo "  $local_ip"
   echo
+  echo "WireGuard (Wormlogic homelab gateway):"
+
+  if [[ -n "${WORMLOGIC_VPN_PUBLIC_KEY:-}" ]]; then
+    echo "  Interface: wormlogic"
+    echo "  VPN IP:    ${WORMLOGIC_VPN_IP:-unknown}"
+    echo "  LAN CIDR:  ${WORMLOGIC_LAN_CIDR:-unknown}"
+    echo
+    echo "⚠ Action required on VPS:"
+    echo
+    echo "Add this peer to /etc/wireguard/wg0.conf:"
+    echo
+    echo "  # ${WORMLOGIC_VPN_MACHINE_ID:-server01}"
+    echo "  [Peer]"
+    echo "  PublicKey = $WORMLOGIC_VPN_PUBLIC_KEY"
+    echo "  AllowedIPs = ${WORMLOGIC_VPN_IP:-REPLACE_WITH_SERVER01_VPN_IP}, ${WORMLOGIC_LAN_CIDR:-REPLACE_WITH_LAN_CIDR}"
+    echo
+    echo "Then restart WireGuard on the VPS:"
+    echo "  sudo systemctl restart wg-quick@wg0"
+  fi
+  echo
 }
 
 # --------------------------------------------------
@@ -657,6 +870,7 @@ main() {
   install_starship
   set_user_environment_defaults
   setup_remote_unlock
+  setup_wormlogic_vpn
   setup_package_export
   setup_system_update
   setup_git_monitoring

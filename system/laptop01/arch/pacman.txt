@@ -99,6 +99,7 @@ nano
 nautilus
 neovim
 nvidia-open-dkms
+openresolv
 openssh
 orca
 papers
@@ -134,6 +135,7 @@ vim
 vlc
 waybar
 wget
+wireguard-tools
 wireplumber
 woff2-font-awesome
 wofi
