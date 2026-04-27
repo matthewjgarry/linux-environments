@@ -360,7 +360,9 @@ setup_git_monitoring() {
 setup_wormlogic_vpn() {
   local vpn_name="wormlogic"
   local vps_host="vpn.wormlogic.com"
-  local vpn_allowed_ips="10.8.0.0/24"
+  local vpn_allowed_ips="10.8.0.0/24, 10.42.42.0/24"
+  local vpn_dns_server="10.42.42.1"
+  local vpn_dns_domain="~wormlogic.com"
   local machine_id_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/machine-id"
 
   local machine_id
@@ -429,11 +431,8 @@ setup_wormlogic_vpn() {
 
   if [[ -z "${WORMLOGIC_VPN_IP:-}" ]]; then
     echo
-    echo "Enter VPN IP for this laptop."
-    echo "Example:"
-    echo "  10.8.0.10/32"
-    echo
-    read -r -p "Laptop VPN IP: " WORMLOGIC_VPN_IP
+    read -r -p "Laptop VPN IP [10.8.0.10/32]: " input_vpn_ip
+    WORMLOGIC_VPN_IP="${input_vpn_ip:-10.8.0.10/32}"
   fi
 
   vps_public_key="$WORMLOGIC_VPS_PUBLIC_KEY"
@@ -452,6 +451,9 @@ setup_wormlogic_vpn() {
   {
     echo "WORMLOGIC_VPS_PUBLIC_KEY='$vps_public_key'"
     echo "WORMLOGIC_VPN_IP='$laptop_vpn_ip'"
+    echo "WORMLOGIC_ALLOWED_IPS='$vpn_allowed_ips'"
+    echo "WORMLOGIC_DNS_SERVER='$vpn_dns_server'"
+    echo "WORMLOGIC_DNS_DOMAIN='$vpn_dns_domain'"
   } >"$settings_file"
 
   chmod 600 "$settings_file"
@@ -480,6 +482,12 @@ setup_wormlogic_vpn() {
   sudo install -m 600 "$source_conf" "$target_conf"
 
   sudo systemctl enable --now "wg-quick@$vpn_name"
+
+  if command -v resolvectl >/dev/null 2>&1; then
+    sudo resolvectl dns "$vpn_name" "$vpn_dns_server" || true
+    sudo resolvectl domain "$vpn_name" "$vpn_dns_domain" || true
+    sudo resolvectl default-route "$vpn_name" yes || true
+  fi
 
   WORMLOGIC_VPN_MACHINE_ID="$machine_id"
   WORMLOGIC_VPN_PUBLIC_KEY="$(<"$public_key_file")"
