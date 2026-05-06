@@ -1,4 +1,11 @@
+fzf
+libuv
+lpeg
+luajit
+luv
+ncurses
 neovim
 talosctl
-fzf
-
+tree-sitter
+unibilium
+utf8proc
