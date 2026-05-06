@@ -519,6 +519,11 @@ apply_gnome_environment() {
   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
   gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 11'
   gsettings set org.gnome.desktop.interface show-battery-percentage true
+  
+  # Keyboard input defaults
+  gsettings set org.gnome.desktop.peripherals.keyboard numlock-state true
+  gsettings set org.gnome.desktop.peripherals.keyboard remember-numlock-state true
+  gsettings set org.gnome.desktop.input-sources xkb-options "['caps:escape']"
 
   # --------------------------------------------------
   # Night light
@@ -557,6 +562,23 @@ apply_gnome_environment() {
 
   echo "✓ GNOME environment configured"
 }
+
+# --------------------------------------------------
+# Default to Xorg session (for touchscreen script compatibility)
+# --------------------------------------------------
+set_gdm_xorg_default_session() {
+  echo "🖥️ Setting default login session to GNOME on Xorg..."
+
+  sudo mkdir -p /var/lib/AccountsService/users
+
+  sudo tee "/var/lib/AccountsService/users/$USER" >/dev/null <<EOF
+[User]
+XSession=gnome-xorg
+EOF
+
+  echo "✓ Default login session set to GNOME on Xorg"
+}
+
 # --------------------------------------------------
 # Disable broken touchscreen persistently
 # - requested specifically as xorg device 9
@@ -803,6 +825,7 @@ main() {
   install_nerd_font
   set_user_environment_defaults
   apply_gnome_environment
+  set_gdm_xorg_default_session
   setup_touchscreen_disable
   setup_package_export
   setup_system_update
