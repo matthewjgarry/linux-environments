@@ -28,6 +28,7 @@ firefox
 freecad
 fuse2
 fzf
+gamescope
 gdm
 gimp
 git

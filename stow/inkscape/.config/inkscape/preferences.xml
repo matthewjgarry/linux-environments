@@ -610,7 +610,7 @@
     <group
        id="preferences"
        state="1"
-       page="24" />
+       page="19" />
     <group
        id="gradienteditor" />
     <group
@@ -1029,13 +1029,13 @@
      org.inkscape.output.png.inkscape.png_antialias="2" />
   <group
      id="desktop"
-     style="fill:#74a253;text-orientation:auto;stroke-width:1.0015748">
+     style="fill:#ff00ff;text-orientation:auto;stroke-width:1.0015748">
     <group
        width="1078"
        height="538"
        x="0"
        y="0"
-       maximized="1"
+       maximized="0"
        fullscreen="0"
        id="geometry" />
     <group
@@ -1169,4 +1169,7 @@
        symbolicWarningColor="4279865599"
        symbolicErrorColor="10086143" />
   </group>
+  <group
+     id="gradient-edit"
+     stoplist="1" />
 </inkscape>
