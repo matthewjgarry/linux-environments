@@ -363,8 +363,9 @@ setup_wormlogic_vpn() {
   local vpn_allowed_ips="10.8.0.0/24, 10.42.42.0/24"
   local vpn_dns_server="10.42.42.1"
   local vpn_dns_domain="~wormlogic.com"
-  local machine_id_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/machine-id"
+  local default_vpn_ip="10.8.0.10/32"
 
+  local machine_id_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/machine-id"
   local machine_id
   local local_dir
   local private_key_file
@@ -372,12 +373,13 @@ setup_wormlogic_vpn() {
   local source_conf
   local target_conf
   local settings_file
-
-  local laptop_private_key
-  local laptop_vpn_ip
+  local server_pubkey_file
+  local client_private_key
+  local client_vpn_ip
   local vps_public_key
+  local input_vpn_ip
 
-  echo "🔐 Setting up Wormlogic WireGuard client..."
+  echo " Setting up Wormlogic WireGuard client..."
 
   if [[ ! -f "$machine_id_file" ]]; then
     echo "✗ Missing machine-id file: $machine_id_file"
@@ -392,6 +394,7 @@ setup_wormlogic_vpn() {
   source_conf="$local_dir/$vpn_name.conf"
   target_conf="/etc/wireguard/$vpn_name.conf"
   settings_file="$local_dir/$vpn_name.env"
+  server_pubkey_file="$REPO_ROOT/shared/wireguard/wormlogic-server.pub"
 
   if ! command -v wg >/dev/null 2>&1; then
     echo "✗ wg not found. wireguard-tools must be installed first."
@@ -399,6 +402,7 @@ setup_wormlogic_vpn() {
   fi
 
   mkdir -p "$local_dir"
+  mkdir -p "$(dirname "$server_pubkey_file")"
   chmod 700 "$REPO_ROOT/local" "$local_dir"
 
   if [[ ! -f "$private_key_file" ]]; then
@@ -408,7 +412,6 @@ setup_wormlogic_vpn() {
     chmod 644 "$public_key_file"
   else
     echo "✓ Existing WireGuard key found for $machine_id"
-
     if [[ ! -f "$public_key_file" ]]; then
       wg pubkey <"$private_key_file" >"$public_key_file"
       chmod 644 "$public_key_file"
@@ -420,52 +423,59 @@ setup_wormlogic_vpn() {
     source "$settings_file"
   fi
 
-  if [[ -z "${WORMLOGIC_VPS_PUBLIC_KEY:-}" ]]; then
+  if [[ -f "$server_pubkey_file" ]]; then
+    vps_public_key="$(tr -d '[:space:]' <"$server_pubkey_file")"
+  fi
+
+  if [[ -z "${vps_public_key:-}" ]]; then
     echo
-    echo "Enter VPS WireGuard public key."
-    echo "Get it from the VPS with:"
-    echo "  sudo awk '/PrivateKey/ {print \$3}' /etc/wireguard/wg0.conf | wg pubkey"
+    echo "Missing Wormlogic VPS WireGuard public key."
+    echo "Get it with:"
+    echo "  ssh lightweight@vpn.wormlogic.com 'sudo cat /etc/wireguard/publickey'"
     echo
-    read -r -p "VPS public key: " WORMLOGIC_VPS_PUBLIC_KEY
+    read -r -p "VPS WireGuard public key: " vps_public_key
+
+    if [[ -z "$vps_public_key" ]]; then
+      echo "✗ VPS public key cannot be empty"
+      exit 1
+    fi
+
+    printf '%s\n' "$vps_public_key" >"$server_pubkey_file"
+    chmod 644 "$server_pubkey_file"
+
+    echo "✓ Saved VPS public key to $server_pubkey_file"
+    echo "  Commit this file so future bootstraps do not prompt again."
   fi
 
   if [[ -z "${WORMLOGIC_VPN_IP:-}" ]]; then
     echo
-    read -r -p "Laptop VPN IP [10.8.0.10/32]: " input_vpn_ip
-    WORMLOGIC_VPN_IP="${input_vpn_ip:-10.8.0.10/32}"
+    read -r -p "Laptop VPN IP [$default_vpn_ip]: " input_vpn_ip
+    WORMLOGIC_VPN_IP="${input_vpn_ip:-$default_vpn_ip}"
   fi
 
-  vps_public_key="$WORMLOGIC_VPS_PUBLIC_KEY"
-  laptop_vpn_ip="$WORMLOGIC_VPN_IP"
+  client_vpn_ip="$WORMLOGIC_VPN_IP"
 
-  if ! printf '%s' "$vps_public_key" | wg pubkey >/dev/null 2>&1; then
-    echo "✗ Invalid VPS public key"
-    exit 1
-  fi
-
-  if [[ ! "$laptop_vpn_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
-    echo "✗ Invalid laptop VPN IP/CIDR: $laptop_vpn_ip"
+  if [[ ! "$client_vpn_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+    echo "✗ Invalid client VPN IP/CIDR: $client_vpn_ip"
     exit 1
   fi
 
   {
-    echo "WORMLOGIC_VPS_PUBLIC_KEY='$vps_public_key'"
-    echo "WORMLOGIC_VPN_IP='$laptop_vpn_ip'"
+    echo "WORMLOGIC_VPN_IP='$client_vpn_ip'"
     echo "WORMLOGIC_ALLOWED_IPS='$vpn_allowed_ips'"
     echo "WORMLOGIC_DNS_SERVER='$vpn_dns_server'"
     echo "WORMLOGIC_DNS_DOMAIN='$vpn_dns_domain'"
   } >"$settings_file"
-
   chmod 600 "$settings_file"
 
-  laptop_private_key="$(<"$private_key_file")"
+  client_private_key="$(<"$private_key_file")"
 
   echo "• Writing local WireGuard config: $source_conf"
 
   {
     echo "[Interface]"
-    echo "PrivateKey = $laptop_private_key"
-    echo "Address = $laptop_vpn_ip"
+    echo "PrivateKey = $client_private_key"
+    echo "Address = $client_vpn_ip"
     echo
     echo "[Peer]"
     echo "PublicKey = $vps_public_key"
@@ -480,7 +490,6 @@ setup_wormlogic_vpn() {
 
   sudo install -d -m 700 /etc/wireguard
   sudo install -m 600 "$source_conf" "$target_conf"
-
   sudo systemctl enable --now "wg-quick@$vpn_name"
 
   if command -v resolvectl >/dev/null 2>&1; then
@@ -491,12 +500,9 @@ setup_wormlogic_vpn() {
 
   WORMLOGIC_VPN_MACHINE_ID="$machine_id"
   WORMLOGIC_VPN_PUBLIC_KEY="$(<"$public_key_file")"
-  WORMLOGIC_VPN_IP="$laptop_vpn_ip"
+  WORMLOGIC_VPN_IP="$client_vpn_ip"
 
   echo "✓ Wormlogic VPN configured"
-  echo "  Machine:       $machine_id"
-  echo "  Source config: $source_conf"
-  echo "  System config: $target_conf"
 }
 
 # --------------------------------------------------
@@ -658,7 +664,7 @@ main() {
   echo "   - disk-space-check      → local disk usage warning (daily)"
   echo "   - heartbeat             → device online signal (daily)"
   echo "   - timeshift-snapshot    → weekly rollback snapshot"
-  echo "   - wormlogic-vpn         → WireGuard tunnel to vps01"
+  echo "   - wormlogic-vpn         → WireGuard tunnel to vpn.wormlogic.com"
   echo
 
   prompt_reboot
