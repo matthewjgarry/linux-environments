@@ -66,4 +66,5 @@ ubuntu-standard
 ubuntu-wallpapers
 vlc
 wbritish
+wireguard-tools
 xclip
