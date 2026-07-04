@@ -519,7 +519,7 @@ apply_gnome_environment() {
   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
   gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 11'
   gsettings set org.gnome.desktop.interface show-battery-percentage true
-  
+
   # Keyboard input defaults
   gsettings set org.gnome.desktop.peripherals.keyboard numlock-state true
   gsettings set org.gnome.desktop.peripherals.keyboard remember-numlock-state true
@@ -705,6 +705,157 @@ setup_git_monitoring() {
 }
 
 # --------------------------------------------------
+# Setup Wormlogic WireGuard client
+# --------------------------------------------------
+setup_wormlogic_vpn() {
+  local vpn_name="wormlogic"
+  local vps_host="vpn.wormlogic.com"
+  local vpn_allowed_ips="10.8.0.0/24, 10.42.42.0/24"
+  local vpn_dns_server="10.42.42.1"
+  local vpn_dns_domain="~wormlogic.com"
+  local default_vpn_ip="10.8.0.11/32"
+
+  local machine_id_file="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/machine-id"
+  local machine_id
+  local local_dir
+  local private_key_file
+  local public_key_file
+  local source_conf
+  local target_conf
+  local settings_file
+  local server_pubkey_file
+  local client_private_key
+  local client_vpn_ip
+  local vps_public_key
+  local input_vpn_ip
+
+  echo " Setting up Wormlogic WireGuard client..."
+
+  if [[ ! -f "$machine_id_file" ]]; then
+    echo "✗ Missing machine-id file: $machine_id_file"
+    exit 1
+  fi
+
+  machine_id="$(<"$machine_id_file")"
+
+  local_dir="$REPO_ROOT/local/wireguard"
+  private_key_file="$local_dir/${machine_id}.key"
+  public_key_file="$local_dir/${machine_id}.pub"
+  source_conf="$local_dir/$vpn_name.conf"
+  target_conf="/etc/wireguard/$vpn_name.conf"
+  settings_file="$local_dir/$vpn_name.env"
+  server_pubkey_file="$REPO_ROOT/shared/wireguard/wormlogic-server.pub"
+
+  if ! command -v wg >/dev/null 2>&1; then
+    echo "✗ wg not found. Install wireguard-tools first."
+    exit 1
+  fi
+
+  mkdir -p "$local_dir"
+  mkdir -p "$(dirname "$server_pubkey_file")"
+  chmod 700 "$REPO_ROOT/local" "$local_dir"
+
+  if [[ ! -f "$private_key_file" ]]; then
+    echo "• Generating WireGuard key for $machine_id..."
+    wg genkey | tee "$private_key_file" | wg pubkey >"$public_key_file"
+    chmod 600 "$private_key_file"
+    chmod 644 "$public_key_file"
+  else
+    echo "✓ Existing WireGuard key found for $machine_id"
+    if [[ ! -f "$public_key_file" ]]; then
+      wg pubkey <"$private_key_file" >"$public_key_file"
+      chmod 644 "$public_key_file"
+    fi
+  fi
+
+  if [[ -f "$settings_file" ]]; then
+    # shellcheck disable=SC1090
+    source "$settings_file"
+  fi
+
+  if [[ -f "$server_pubkey_file" ]]; then
+    vps_public_key="$(tr -d '[:space:]' <"$server_pubkey_file")"
+  fi
+
+  if [[ -z "${vps_public_key:-}" ]]; then
+    echo
+    echo "Missing Wormlogic VPS WireGuard public key."
+    echo "Get it with:"
+    echo "  ssh lightweight@vpn.wormlogic.com 'sudo cat /etc/wireguard/publickey'"
+    echo
+    read -r -p "VPS WireGuard public key: " vps_public_key
+
+    if [[ -z "$vps_public_key" ]]; then
+      echo "✗ VPS public key cannot be empty"
+      exit 1
+    fi
+
+    printf '%s\n' "$vps_public_key" >"$server_pubkey_file"
+    chmod 644 "$server_pubkey_file"
+
+    echo "✓ Saved VPS public key to $server_pubkey_file"
+    echo "  Commit this file so future bootstraps do not prompt again."
+  fi
+
+  if [[ -z "${WORMLOGIC_VPN_IP:-}" ]]; then
+    echo
+    read -r -p "Laptop VPN IP [$default_vpn_ip]: " input_vpn_ip
+    WORMLOGIC_VPN_IP="${input_vpn_ip:-$default_vpn_ip}"
+  fi
+
+  client_vpn_ip="$WORMLOGIC_VPN_IP"
+
+  if [[ ! "$client_vpn_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+    echo "✗ Invalid client VPN IP/CIDR: $client_vpn_ip"
+    exit 1
+  fi
+
+  {
+    echo "WORMLOGIC_VPN_IP='$client_vpn_ip'"
+    echo "WORMLOGIC_ALLOWED_IPS='$vpn_allowed_ips'"
+    echo "WORMLOGIC_DNS_SERVER='$vpn_dns_server'"
+    echo "WORMLOGIC_DNS_DOMAIN='$vpn_dns_domain'"
+  } >"$settings_file"
+  chmod 600 "$settings_file"
+
+  client_private_key="$(<"$private_key_file")"
+
+  echo "• Writing local WireGuard config: $source_conf"
+
+  {
+    echo "[Interface]"
+    echo "PrivateKey = $client_private_key"
+    echo "Address = $client_vpn_ip"
+    echo
+    echo "[Peer]"
+    echo "PublicKey = $vps_public_key"
+    echo "Endpoint = $vps_host:51820"
+    echo "AllowedIPs = $vpn_allowed_ips"
+    echo "PersistentKeepalive = 25"
+  } >"$source_conf"
+
+  chmod 600 "$source_conf"
+
+  echo "• Installing WireGuard config: $target_conf"
+
+  sudo install -d -m 700 /etc/wireguard
+  sudo install -m 600 "$source_conf" "$target_conf"
+  sudo systemctl enable --now "wg-quick@$vpn_name"
+
+  if command -v resolvectl >/dev/null 2>&1; then
+    sudo resolvectl dns "$vpn_name" "$vpn_dns_server" || true
+    sudo resolvectl domain "$vpn_name" "$vpn_dns_domain" || true
+    sudo resolvectl default-route "$vpn_name" yes || true
+  fi
+
+  WORMLOGIC_VPN_MACHINE_ID="$machine_id"
+  WORMLOGIC_VPN_PUBLIC_KEY="$(<"$public_key_file")"
+  WORMLOGIC_VPN_IP="$client_vpn_ip"
+
+  echo "✓ Wormlogic VPN configured"
+}
+
+# --------------------------------------------------
 # Prepare shell dotfiles for stow
 # - back up regular files
 # - leave symlinks alone
@@ -796,6 +947,24 @@ show_summary() {
   echo "Local IP:"
   echo "  $local_ip"
   echo
+  echo "WireGuard (Wormlogic VPN):"
+  if [[ -n "${WORMLOGIC_VPN_PUBLIC_KEY:-}" ]]; then
+    echo " Interface: wormlogic"
+    echo " VPN IP: ${WORMLOGIC_VPN_IP:-unknown}"
+    echo
+    echo "⚠ Action required on VPS:"
+    echo
+    echo "Add this peer to /etc/wireguard/wg0.conf:"
+    echo
+    echo " # ${WORMLOGIC_VPN_MACHINE_ID:-unknown}"
+    echo " [Peer]"
+    echo " PublicKey = $WORMLOGIC_VPN_PUBLIC_KEY"
+    echo " AllowedIPs = ${WORMLOGIC_VPN_IP:-REPLACE_WITH_CLIENT_IP}"
+    echo
+    echo "Then restart WireGuard on the VPS:"
+    echo " sudo systemctl restart wg-quick@wg0"
+  fi
+  echo
 }
 
 # --------------------------------------------------
@@ -831,6 +1000,7 @@ main() {
   setup_system_update
   setup_git_monitoring
   setup_shared_monitoring
+  setup_wormlogic_vpn
   prepare_shell_dotfiles
   apply_general_dotfiles
   apply_host_environment
@@ -846,6 +1016,7 @@ main() {
   echo "   - disk-space-check      → local disk usage warning (daily)"
   echo "   - heartbeat             → device online signal (daily)"
   echo "   - disable-touchscreen   → disable Xorg device 9 at login"
+  echo "   - wormlogic-vpn         → WireGuard tunnel to vpn.wormlogic.com"
   echo
 
   prompt_reboot
