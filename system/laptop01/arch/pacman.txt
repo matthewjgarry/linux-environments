@@ -134,6 +134,7 @@ timeshift
 tmux
 tree
 ttf-liberation
+upscayl-bin
 vim
 vlc
 waybar
